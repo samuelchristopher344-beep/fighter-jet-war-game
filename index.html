@@ -113,50 +113,94 @@
       scene.add(m);
     }
 
+    // Better fighter jet model
+    function createFighterJet(color = 0x4a5568, accent = 0x2d3748) {
+      const jet = new THREE.Group();
+      const metal = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.25 });
+      const dark = new THREE.MeshStandardMaterial({ color: accent, metalness: 0.5, roughness: 0.4 });
+      const glass = new THREE.MeshStandardMaterial({ color: 0x1a365d, transparent: true, opacity: 0.65, metalness: 0.9, roughness: 0.1 });
+
+      // Main fuselage (tapered)
+      const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.9, 9, 10), metal);
+      fuse.rotation.z = Math.PI / 2;
+      jet.add(fuse);
+
+      // Nose cone
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.2, 8), metal);
+      nose.rotation.z = -Math.PI / 2;
+      nose.position.set(5.5, 0, 0);
+      jet.add(nose);
+
+      // Wings (swept)
+      const wingGeo = new THREE.BoxGeometry(5.5, 0.12, 2.2);
+      const leftWing = new THREE.Mesh(wingGeo, dark);
+      leftWing.position.set(-0.5, 0, -1.8);
+      leftWing.rotation.y = -0.25;
+      jet.add(leftWing);
+      const rightWing = leftWing.clone();
+      rightWing.position.z = 1.8;
+      rightWing.rotation.y = 0.25;
+      jet.add(rightWing);
+
+      // Wing tips
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), dark);
+      tip.position.set(-2.8, 0.2, -3.6);
+      jet.add(tip);
+      const tip2 = tip.clone();
+      tip2.position.z = 3.6;
+      jet.add(tip2);
+
+      // Vertical stabilizer
+      const vtail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.8, 1.4), dark);
+      vtail.position.set(-4.2, 1.1, 0);
+      jet.add(vtail);
+
+      // Horizontal stabilizers
+      const htail = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.6), dark);
+      htail.position.set(-4.0, 0.3, -1.2);
+      jet.add(htail);
+      const htail2 = htail.clone();
+      htail2.position.z = 1.2;
+      jet.add(htail2);
+
+      // Canopy
+      const canopy = new THREE.Mesh(
+        new THREE.SphereGeometry(0.65, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2.2),
+        glass
+      );
+      canopy.position.set(2.2, 0.55, 0);
+      canopy.rotation.z = Math.PI / 2;
+      jet.add(canopy);
+
+      // Engine exhausts
+      const exhaust = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.45, 0.8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 })
+      );
+      exhaust.rotation.z = Math.PI / 2;
+      exhaust.position.set(-4.6, 0, 0);
+      jet.add(exhaust);
+
+      // Intake
+      const intake = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 0.5, 0.8),
+        dark
+      );
+      intake.position.set(1.5, -0.4, 0);
+      jet.add(intake);
+
+      return jet;
+    }
+
     // Player jet
-    const jet = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.6, 1.2, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0x4a5568, metalness: 0.6, roughness: 0.3 })
-    );
-    body.rotation.z = Math.PI / 2;
-    jet.add(body);
-    const wing = new THREE.Mesh(
-      new THREE.BoxGeometry(6, 0.15, 1.5),
-      new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.5 })
-    );
-    jet.add(wing);
-    const tail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 1.5, 1.2),
-      new THREE.MeshStandardMaterial({ color: 0x2d3748 })
-    );
-    tail.position.set(-3.5, 0.8, 0);
-    jet.add(tail);
-    const canopy = new THREE.Mesh(
-      new THREE.SphereGeometry(0.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshStandardMaterial({ color: 0x1a365d, transparent: true, opacity: 0.7, metalness: 0.8 })
-    );
-    canopy.position.set(1.5, 0.5, 0);
-    canopy.rotation.z = Math.PI / 2;
-    jet.add(canopy);
+    const jet = createFighterJet(0x4a5568, 0x2d3748);
     jet.position.set(0, 200, 0);
     scene.add(jet);
 
     // Enemy jets
     const enemies = [];
     function createEnemy(x, y, z) {
-      const e = new THREE.Group();
-      const b = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.5, 1, 7, 6),
-        new THREE.MeshStandardMaterial({ color: 0x8b0000, metalness: 0.4 })
-      );
-      b.rotation.z = Math.PI / 2;
-      e.add(b);
-      const w = new THREE.Mesh(
-        new THREE.BoxGeometry(5, 0.12, 1.2),
-        new THREE.MeshStandardMaterial({ color: 0x5a0000 })
-      );
-      e.add(w);
+      const e = createFighterJet(0x8b0000, 0x5a0000);
       e.position.set(x, y, z);
       e.userData = { health: 100, speed: 0.6 + Math.random() * 0.4 };
       scene.add(e);
@@ -198,7 +242,7 @@
         new THREE.MeshBasicMaterial({ color: 0xffff00 })
       );
       const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
-      bullet.position.copy(jet.position).add(dir.clone().multiplyScalar(4));
+      bullet.position.copy(jet.position).add(dir.clone().multiplyScalar(6));
       bullet.userData = { velocity: dir.multiplyScalar(8), life: 80 };
       scene.add(bullet);
       bullets.push(bullet);
@@ -209,17 +253,16 @@
       missileCount--;
       updateWeaponHud();
       const msl = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.12, 0.2, 2.2, 6),
+        new THREE.CylinderGeometry(0.12, 0.2, 2.4, 6),
         new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.7 })
       );
       msl.rotation.z = Math.PI / 2;
       const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
-      msl.position.copy(jet.position).add(dir.clone().multiplyScalar(5));
+      msl.position.copy(jet.position).add(dir.clone().multiplyScalar(6));
       msl.userData = {
         velocity: dir.clone().multiplyScalar(2.5),
         target: lockedTarget,
-        life: 300,
-        smoke: []
+        life: 300
       };
       scene.add(msl);
       missiles.push(msl);
@@ -243,7 +286,7 @@
 
     function updateView() {
       if (cockpitView) {
-        camera.position.set(1.8, 0.6, 0);
+        camera.position.set(2.4, 0.7, 0);
         camera.rotation.set(0, 0, 0);
         jet.add(camera);
         viewName.textContent = 'Cockpit';
@@ -284,7 +327,6 @@
       jet.position.add(forward.clone().multiplyScalar(speed));
       if (jet.position.y < 20) jet.position.y = 20;
 
-      // Enemies simple movement
       enemies.forEach(e => {
         if (!e.parent) return;
         const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(e.quaternion);
@@ -293,7 +335,6 @@
         if (e.position.y < 30) e.position.y = 30;
       });
 
-      // Bullets
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.position.add(b.userData.velocity);
@@ -303,10 +344,9 @@
           bullets.splice(i, 1);
           continue;
         }
-        // Hit check
         for (let j = enemies.length - 1; j >= 0; j--) {
           const e = enemies[j];
-          if (b.position.distanceTo(e.position) < 4) {
+          if (b.position.distanceTo(e.position) < 5) {
             e.userData.health -= 10;
             scene.remove(b);
             bullets.splice(i, 1);
@@ -323,7 +363,6 @@
         }
       }
 
-      // Missiles
       for (let i = missiles.length - 1; i >= 0; i--) {
         const m = missiles[i];
         if (m.userData.target && m.userData.target.parent) {
@@ -334,7 +373,6 @@
         m.lookAt(m.position.clone().add(m.userData.velocity));
         m.userData.life--;
 
-        // Smoke trail
         if (Math.random() > 0.6) {
           const smoke = new THREE.Mesh(
             new THREE.SphereGeometry(0.3, 4, 4),
@@ -351,10 +389,9 @@
           continue;
         }
 
-        // Hit
         for (let j = enemies.length - 1; j >= 0; j--) {
           const e = enemies[j];
-          if (m.position.distanceTo(e.position) < 6) {
+          if (m.position.distanceTo(e.position) < 7) {
             scene.remove(e);
             scene.remove(m);
             enemies.splice(j, 1);
@@ -372,7 +409,7 @@
       document.getElementById('spd').textContent = Math.round(speed * 350);
 
       if (!cockpitView) {
-        const offset = new THREE.Vector3(-18, 6, 0).applyQuaternion(jet.quaternion);
+        const offset = new THREE.Vector3(-22, 7, 0).applyQuaternion(jet.quaternion);
         camera.position.copy(jet.position).add(offset);
         camera.lookAt(jet.position);
       }
