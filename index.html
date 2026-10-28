@@ -16,12 +16,22 @@
       pointer-events: none;
       font-size: 14px;
     }
+    #weaponHud {
+      position: absolute;
+      top: 40px;
+      left: 12px;
+      pointer-events: none;
+      font-size: 13px;
+      color: #c9a84c;
+    }
     #controls {
       position: absolute;
       bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
       pointer-events: auto;
+      display: flex;
+      gap: 10px;
     }
     button {
       background: #1a1a2e;
@@ -40,6 +50,7 @@
       font-size: 12px;
       opacity: 0.8;
     }
+    .lock { color: #ff4444; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -47,9 +58,16 @@
     <div>ALT: <span id="alt">5000</span> ft &nbsp; SPD: <span id="spd">420</span> kt</div>
     <div>View: <span id="viewName">External</span></div>
   </div>
-  <div id="info">WASD / Arrows to fly &nbsp;|&nbsp; C to toggle view &nbsp;|&nbsp; Mouse to look (external)</div>
+  <div id="weaponHud">
+    GUN: <span id="gunAmmo">500</span> &nbsp;|&nbsp;
+    MSL: <span id="mslCount">4</span> &nbsp;|&nbsp;
+    <span id="lockStatus">No lock</span>
+  </div>
+  <div id="info">WASD to fly &nbsp;|&nbsp; C view &nbsp;|&nbsp; Space = gun &nbsp;|&nbsp; M = missile &nbsp;|&nbsp; L = cycle lock</div>
   <div id="controls">
     <button id="toggleView">Switch to Cockpit View</button>
+    <button id="fireGun">Fire Gun</button>
+    <button id="fireMissile">Fire Missile</button>
   </div>
   <script type="importmap">
     {
@@ -71,14 +89,12 @@
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    // Lights
     const sun = new THREE.DirectionalLight(0xffffff, 1.2);
     sun.position.set(200, 400, 100);
     sun.castShadow = true;
     scene.add(sun);
     scene.add(new THREE.AmbientLight(0x404060, 0.6));
 
-    // Ground / terrain
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(8000, 8000),
       new THREE.MeshLambertMaterial({ color: 0x3a5f3a })
@@ -87,7 +103,6 @@
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Simple mountains
     for (let i = 0; i < 12; i++) {
       const m = new THREE.Mesh(
         new THREE.ConeGeometry(80 + Math.random() * 60, 120 + Math.random() * 80, 6),
@@ -98,34 +113,25 @@
       scene.add(m);
     }
 
-    // Fighter jet (simple group)
+    // Player jet
     const jet = new THREE.Group();
-
-    // Fuselage
     const body = new THREE.Mesh(
       new THREE.CylinderGeometry(0.6, 1.2, 8, 8),
       new THREE.MeshStandardMaterial({ color: 0x4a5568, metalness: 0.6, roughness: 0.3 })
     );
     body.rotation.z = Math.PI / 2;
     jet.add(body);
-
-    // Wings
     const wing = new THREE.Mesh(
       new THREE.BoxGeometry(6, 0.15, 1.5),
       new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.5 })
     );
-    wing.position.set(0, 0, 0);
     jet.add(wing);
-
-    // Tail
     const tail = new THREE.Mesh(
       new THREE.BoxGeometry(0.2, 1.5, 1.2),
       new THREE.MeshStandardMaterial({ color: 0x2d3748 })
     );
     tail.position.set(-3.5, 0.8, 0);
     jet.add(tail);
-
-    // Cockpit canopy
     const canopy = new THREE.Mesh(
       new THREE.SphereGeometry(0.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
       new THREE.MeshStandardMaterial({ color: 0x1a365d, transparent: true, opacity: 0.7, metalness: 0.8 })
@@ -133,79 +139,240 @@
     canopy.position.set(1.5, 0.5, 0);
     canopy.rotation.z = Math.PI / 2;
     jet.add(canopy);
-
     jet.position.set(0, 200, 0);
     scene.add(jet);
 
-    // View state
+    // Enemy jets
+    const enemies = [];
+    function createEnemy(x, y, z) {
+      const e = new THREE.Group();
+      const b = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 1, 7, 6),
+        new THREE.MeshStandardMaterial({ color: 0x8b0000, metalness: 0.4 })
+      );
+      b.rotation.z = Math.PI / 2;
+      e.add(b);
+      const w = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 0.12, 1.2),
+        new THREE.MeshStandardMaterial({ color: 0x5a0000 })
+      );
+      e.add(w);
+      e.position.set(x, y, z);
+      e.userData = { health: 100, speed: 0.6 + Math.random() * 0.4 };
+      scene.add(e);
+      enemies.push(e);
+      return e;
+    }
+    createEnemy(300, 250, 200);
+    createEnemy(-400, 180, -300);
+    createEnemy(100, 300, -500);
+
+    // Weapons
+    const bullets = [];
+    const missiles = [];
+    let gunAmmo = 500;
+    let missileCount = 4;
+    let lockedTarget = null;
+    let lockIndex = 0;
+
+    function updateWeaponHud() {
+      document.getElementById('gunAmmo').textContent = gunAmmo;
+      document.getElementById('mslCount').textContent = missileCount;
+      const lockEl = document.getElementById('lockStatus');
+      if (lockedTarget) {
+        lockEl.textContent = 'LOCK';
+        lockEl.className = 'lock';
+      } else {
+        lockEl.textContent = 'No lock';
+        lockEl.className = '';
+      }
+    }
+    updateWeaponHud();
+
+    function fireGun() {
+      if (gunAmmo <= 0) return;
+      gunAmmo--;
+      updateWeaponHud();
+      const bullet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffff00 })
+      );
+      const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
+      bullet.position.copy(jet.position).add(dir.clone().multiplyScalar(4));
+      bullet.userData = { velocity: dir.multiplyScalar(8), life: 80 };
+      scene.add(bullet);
+      bullets.push(bullet);
+    }
+
+    function fireMissile() {
+      if (missileCount <= 0) return;
+      missileCount--;
+      updateWeaponHud();
+      const msl = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.2, 2.2, 6),
+        new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.7 })
+      );
+      msl.rotation.z = Math.PI / 2;
+      const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
+      msl.position.copy(jet.position).add(dir.clone().multiplyScalar(5));
+      msl.userData = {
+        velocity: dir.clone().multiplyScalar(2.5),
+        target: lockedTarget,
+        life: 300,
+        smoke: []
+      };
+      scene.add(msl);
+      missiles.push(msl);
+    }
+
+    function cycleLock() {
+      if (enemies.length === 0) {
+        lockedTarget = null;
+        updateWeaponHud();
+        return;
+      }
+      lockIndex = (lockIndex + 1) % enemies.length;
+      lockedTarget = enemies[lockIndex];
+      updateWeaponHud();
+    }
+
+    // View
     let cockpitView = false;
     const viewName = document.getElementById('viewName');
     const toggleBtn = document.getElementById('toggleView');
 
     function updateView() {
       if (cockpitView) {
-        // Inside cockpit
         camera.position.set(1.8, 0.6, 0);
         camera.rotation.set(0, 0, 0);
         jet.add(camera);
         viewName.textContent = 'Cockpit';
         toggleBtn.textContent = 'Switch to External View';
       } else {
-        // External chase camera
         scene.add(camera);
-        camera.position.set(-18, 6, 0);
-        camera.lookAt(jet.position);
         viewName.textContent = 'External';
         toggleBtn.textContent = 'Switch to Cockpit View';
       }
     }
     updateView();
 
-    toggleBtn.onclick = () => {
-      cockpitView = !cockpitView;
-      updateView();
-    };
+    toggleBtn.onclick = () => { cockpitView = !cockpitView; updateView(); };
+    document.getElementById('fireGun').onclick = fireGun;
+    document.getElementById('fireMissile').onclick = fireMissile;
 
-    document.addEventListener('keydown', (e) => {
-      if (e.key.toLowerCase() === 'c') {
-        cockpitView = !cockpitView;
-        updateView();
-      }
-    });
-
-    // Simple flight controls
     const keys = {};
-    document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+    document.addEventListener('keydown', (e) => {
+      keys[e.key.toLowerCase()] = true;
+      if (e.key.toLowerCase() === 'c') { cockpitView = !cockpitView; updateView(); }
+      if (e.key === ' ') { e.preventDefault(); fireGun(); }
+      if (e.key.toLowerCase() === 'm') fireMissile();
+      if (e.key.toLowerCase() === 'l') cycleLock();
+    });
     document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
-    let velocity = new THREE.Vector3(0, 0, 0);
     const speed = 1.2;
 
     function animate() {
       requestAnimationFrame(animate);
 
-      // Controls
       if (keys['w'] || keys['arrowup']) jet.rotation.x -= 0.008;
       if (keys['s'] || keys['arrowdown']) jet.rotation.x += 0.008;
       if (keys['a'] || keys['arrowleft']) jet.rotation.y += 0.012;
       if (keys['d'] || keys['arrowright']) jet.rotation.y -= 0.012;
 
-      // Move forward
-      const forward = new THREE.Vector3(1, 0, 0);
-      forward.applyQuaternion(jet.quaternion);
-      jet.position.add(forward.multiplyScalar(speed));
-
-      // Keep above ground
+      const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
+      jet.position.add(forward.clone().multiplyScalar(speed));
       if (jet.position.y < 20) jet.position.y = 20;
 
-      // Update HUD
+      // Enemies simple movement
+      enemies.forEach(e => {
+        if (!e.parent) return;
+        const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(e.quaternion);
+        e.position.add(dir.multiplyScalar(e.userData.speed));
+        e.rotation.y += (Math.random() - 0.5) * 0.01;
+        if (e.position.y < 30) e.position.y = 30;
+      });
+
+      // Bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.position.add(b.userData.velocity);
+        b.userData.life--;
+        if (b.userData.life <= 0) {
+          scene.remove(b);
+          bullets.splice(i, 1);
+          continue;
+        }
+        // Hit check
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (b.position.distanceTo(e.position) < 4) {
+            e.userData.health -= 10;
+            scene.remove(b);
+            bullets.splice(i, 1);
+            if (e.userData.health <= 0) {
+              scene.remove(e);
+              enemies.splice(j, 1);
+              if (lockedTarget === e) {
+                lockedTarget = null;
+                updateWeaponHud();
+              }
+            }
+            break;
+          }
+        }
+      }
+
+      // Missiles
+      for (let i = missiles.length - 1; i >= 0; i--) {
+        const m = missiles[i];
+        if (m.userData.target && m.userData.target.parent) {
+          const toTarget = m.userData.target.position.clone().sub(m.position).normalize();
+          m.userData.velocity.lerp(toTarget.multiplyScalar(3.5), 0.04);
+        }
+        m.position.add(m.userData.velocity);
+        m.lookAt(m.position.clone().add(m.userData.velocity));
+        m.userData.life--;
+
+        // Smoke trail
+        if (Math.random() > 0.6) {
+          const smoke = new THREE.Mesh(
+            new THREE.SphereGeometry(0.3, 4, 4),
+            new THREE.MeshBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.5 })
+          );
+          smoke.position.copy(m.position);
+          scene.add(smoke);
+          setTimeout(() => scene.remove(smoke), 400);
+        }
+
+        if (m.userData.life <= 0) {
+          scene.remove(m);
+          missiles.splice(i, 1);
+          continue;
+        }
+
+        // Hit
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (m.position.distanceTo(e.position) < 6) {
+            scene.remove(e);
+            scene.remove(m);
+            enemies.splice(j, 1);
+            missiles.splice(i, 1);
+            if (lockedTarget === e) {
+              lockedTarget = null;
+              updateWeaponHud();
+            }
+            break;
+          }
+        }
+      }
+
       document.getElementById('alt').textContent = Math.round(jet.position.y * 10);
       document.getElementById('spd').textContent = Math.round(speed * 350);
 
-      // External camera follow
       if (!cockpitView) {
-        const offset = new THREE.Vector3(-18, 6, 0);
-        offset.applyQuaternion(jet.quaternion);
+        const offset = new THREE.Vector3(-18, 6, 0).applyQuaternion(jet.quaternion);
         camera.position.copy(jet.position).add(offset);
         camera.lookAt(jet.position);
       }
