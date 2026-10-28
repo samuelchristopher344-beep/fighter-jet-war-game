@@ -6,6 +6,51 @@
   <title>Fighter Jet War Game</title>
   <style>
     body { margin: 0; overflow: hidden; background: #0a0a12; color: #eee; font-family: system-ui, sans-serif; touch-action: none; }
+    #menu {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, #0a1628 0%, #1a2a40 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #menu h1 { font-size: 28px; margin-bottom: 8px; color: #c9a84c; }
+    #menu p { opacity: 0.8; margin-bottom: 24px; }
+    #playerName {
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid #c9a84c;
+      background: #1a1a2e;
+      color: #eee;
+      font-size: 16px;
+      margin-bottom: 16px;
+      width: 220px;
+      text-align: center;
+    }
+    #startBtn {
+      padding: 14px 40px;
+      background: #c9a84c;
+      color: #0a0a12;
+      border: none;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    #gameOver {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 99;
+    }
+    #gameOver h2 { color: #ff4444; font-size: 32px; }
+    #hud, #weaponHud, #scoreHud, #reticle, #radar, #controls, #info { display: none; }
     #hud {
       position: absolute;
       top: 12px;
@@ -58,8 +103,8 @@
       position: absolute;
       bottom: 16px;
       right: 16px;
-      width: 120px;
-      height: 120px;
+      width: 110px;
+      height: 110px;
       background: rgba(0, 20, 0, 0.7);
       border: 2px solid #0f0;
       border-radius: 50%;
@@ -68,20 +113,20 @@
     #radar canvas { width: 100%; height: 100%; }
     #controls {
       position: absolute;
-      bottom: 20px;
-      left: 20px;
+      bottom: 16px;
+      left: 16px;
       pointer-events: auto;
       display: grid;
-      grid-template-columns: 60px 60px 60px;
-      gap: 8px;
+      grid-template-columns: 55px 55px 55px;
+      gap: 6px;
     }
     .btn {
       background: rgba(26,26,46,0.85);
       color: #c9a84c;
       border: 1px solid #c9a84c;
       border-radius: 10px;
-      width: 60px;
-      height: 50px;
+      width: 55px;
+      height: 46px;
       font-size: 12px;
       display: flex;
       align-items: center;
@@ -92,20 +137,48 @@
     .btn:active { background: #2a2a40; }
     #info {
       position: absolute;
-      bottom: 90px;
+      bottom: 80px;
       left: 12px;
       font-size: 11px;
-      opacity: 0.75;
+      opacity: 0.7;
       pointer-events: none;
     }
     .lock { color: #ff4444; font-weight: bold; }
+    #healthBar {
+      position: absolute;
+      top: 70px;
+      left: 12px;
+      width: 140px;
+      height: 8px;
+      background: #333;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #healthFill {
+      height: 100%;
+      width: 100%;
+      background: #4caf50;
+      transition: width 0.2s;
+    }
   </style>
 </head>
 <body>
+  <div id="menu">
+    <h1>Fighter Jet War</h1>
+    <p>Enter callsign and start mission</p>
+    <input id="playerName" placeholder="Pilot name" maxlength="16" />
+    <button id="startBtn">Start Mission</button>
+  </div>
+  <div id="gameOver">
+    <h2>MISSION FAILED</h2>
+    <p id="finalScore">Score: 0</p>
+    <button id="restartBtn" style="padding:12px 28px; background:#c9a84c; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Restart</button>
+  </div>
   <div id="hud">
     <div>ALT: <span id="alt">5000</span> ft &nbsp; SPD: <span id="spd">420</span> kt</div>
     <div>View: <span id="viewName">External</span></div>
   </div>
+  <div id="healthBar"><div id="healthFill"></div></div>
   <div id="scoreHud">SCORE: <span id="score">0</span></div>
   <div id="weaponHud">
     GUN: <span id="gunAmmo">500</span> &nbsp;|&nbsp;
@@ -113,8 +186,8 @@
     <span id="lockStatus">No lock</span>
   </div>
   <div id="reticle"></div>
-  <div id="radar"><canvas id="radarCanvas" width="120" height="120"></canvas></div>
-  <div id="info">Use on-screen buttons or WASD / Arrows</div>
+  <div id="radar"><canvas id="radarCanvas" width="110" height="110"></canvas></div>
+  <div id="info">Use on-screen buttons or WASD</div>
   <div id="controls">
     <div class="btn" id="btnUp">↑</div>
     <div class="btn" id="btnView">View</div>
@@ -136,6 +209,10 @@
   <script type="module">
     import * as THREE from 'three';
 
+    let gameRunning = false;
+    let playerHealth = 100;
+    let playerName = 'Pilot';
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x5a8cc0);
     scene.fog = new THREE.Fog(0x5a8cc0, 800, 6000);
@@ -153,10 +230,9 @@
     scene.add(new THREE.AmbientLight(0x404060, 0.5));
     scene.add(new THREE.HemisphereLight(0x87ceeb, 0x3a5f3a, 0.6));
 
-    // Terrain
     function createTerrain() {
       const size = 20000;
-      const segments = 60;
+      const segments = 50;
       const geo = new THREE.PlaneGeometry(size, size, segments, segments);
       const pos = geo.attributes.position;
       for (let i = 0; i < pos.count; i++) {
@@ -183,10 +259,10 @@
       scene.add(water);
     }
 
-    for (let i = 0; i < 16; i++) {
-      const h = 100 + Math.random() * 200;
+    for (let i = 0; i < 14; i++) {
+      const h = 100 + Math.random() * 180;
       const m = new THREE.Mesh(
-        new THREE.ConeGeometry(60 + Math.random() * 80, h, 7),
+        new THREE.ConeGeometry(55 + Math.random() * 70, h, 7),
         new THREE.MeshLambertMaterial({ color: 0x6b6b6b, flatShading: true })
       );
       m.position.set((Math.random() - 0.5) * 8000, h / 2, (Math.random() - 0.5) * 8000);
@@ -264,14 +340,25 @@
     function createEnemy(x, y, z) {
       const e = createFighterJet(0x8b0000, 0x5a0000);
       e.position.set(x, y, z);
-      e.userData = { health: 100, speed: 0.5 + Math.random() * 0.3 };
+      e.userData = {
+        health: 100,
+        speed: 0.7 + Math.random() * 0.3,
+        attackCooldown: 0
+      };
       scene.add(e);
       enemies.push(e);
       return e;
     }
-    createEnemy(300, 250, 200);
-    createEnemy(-400, 180, -300);
-    createEnemy(100, 300, -500);
+
+    function spawnWave() {
+      for (let i = 0; i < 3; i++) {
+        createEnemy(
+          (Math.random() - 0.5) * 1800,
+          160 + Math.random() * 180,
+          (Math.random() - 0.5) * 1800
+        );
+      }
+    }
 
     const explosions = [];
     function createExplosion(pos) {
@@ -313,32 +400,44 @@
         lockEl.textContent = 'No lock';
         lockEl.className = '';
       }
+      document.getElementById('healthFill').style.width = Math.max(0, playerHealth) + '%';
+      document.getElementById('healthFill').style.background = playerHealth > 40 ? '#4caf50' : '#ff4444';
     }
-    updateHud();
 
     function fireGun() {
-      if (gunAmmo <= 0) return;
+      if (!gameRunning || gunAmmo <= 0) return;
       gunAmmo--;
       updateHud();
       const bullet = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
       const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
       bullet.position.copy(jet.position).add(dir.clone().multiplyScalar(6));
-      bullet.userData = { velocity: dir.multiplyScalar(9), life: 70 };
+      bullet.userData = { velocity: dir.multiplyScalar(9), life: 70, owner: 'player' };
       scene.add(bullet);
       bullets.push(bullet);
     }
 
     function fireMissile() {
-      if (missileCount <= 0) return;
+      if (!gameRunning || missileCount <= 0) return;
       missileCount--;
       updateHud();
       const msl = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 2.4, 6), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.7 }));
       msl.rotation.z = Math.PI / 2;
       const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
       msl.position.copy(jet.position).add(dir.clone().multiplyScalar(6));
-      msl.userData = { velocity: dir.clone().multiplyScalar(2.8), target: lockedTarget, life: 280 };
+      msl.userData = { velocity: dir.clone().multiplyScalar(2.8), target: lockedTarget, life: 280, owner: 'player' };
       scene.add(msl);
       missiles.push(msl);
+    }
+
+    function enemyFire(enemy) {
+      if (enemy.userData.attackCooldown > 0) return;
+      enemy.userData.attackCooldown = 40 + Math.random() * 30;
+      const bullet = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff4444 }));
+      const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(enemy.quaternion);
+      bullet.position.copy(enemy.position).add(dir.clone().multiplyScalar(5));
+      bullet.userData = { velocity: dir.multiplyScalar(7), life: 60, owner: 'enemy' };
+      scene.add(bullet);
+      bullets.push(bullet);
     }
 
     function cycleLock() {
@@ -360,15 +459,33 @@
       score += 100;
       if (lockedTarget === e) lockedTarget = null;
       updateHud();
-      setTimeout(() => {
-        createEnemy((Math.random() - 0.5) * 2000, 150 + Math.random() * 200, (Math.random() - 0.5) * 2000);
-      }, 3000);
+      if (enemies.length === 0 && gameRunning) {
+        setTimeout(spawnWave, 2500);
+      }
+    }
+
+    function damagePlayer(amount) {
+      if (!gameRunning) return;
+      playerHealth -= amount;
+      updateHud();
+      if (playerHealth <= 0) {
+        endGame();
+      }
+    }
+
+    function endGame() {
+      gameRunning = false;
+      document.getElementById('finalScore').textContent = playerName + ' — Score: ' + score;
+      document.getElementById('gameOver').style.display = 'flex';
+      ['hud','weaponHud','scoreHud','reticle','radar','controls','info','healthBar'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+      });
     }
 
     const radarCtx = document.getElementById('radarCanvas').getContext('2d');
     function drawRadar() {
       const c = radarCtx;
-      const s = 120;
+      const s = 110;
       c.clearRect(0, 0, s, s);
       c.strokeStyle = '#0f0';
       c.lineWidth = 1;
@@ -408,8 +525,7 @@
     }
     updateView();
 
-    // Controls state
-    const input = { pitch: 0, yaw: 0, roll: 0, throttle: 0 };
+    const input = { pitch: 0, yaw: 0 };
 
     function bindHold(id, onDown, onUp) {
       const el = document.getElementById(id);
@@ -444,10 +560,42 @@
     });
     document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
+    function startGame() {
+      playerName = document.getElementById('playerName').value.trim() || 'Pilot';
+      document.getElementById('menu').style.display = 'none';
+      document.getElementById('gameOver').style.display = 'none';
+      ['hud','weaponHud','scoreHud','reticle','radar','controls','info','healthBar'].forEach(id => {
+        document.getElementById(id).style.display = '';
+      });
+      playerHealth = 100;
+      score = 0;
+      gunAmmo = 500;
+      missileCount = 4;
+      lockedTarget = null;
+      gameRunning = true;
+      enemies.forEach(e => scene.remove(e));
+      enemies.length = 0;
+      bullets.forEach(b => scene.remove(b));
+      bullets.length = 0;
+      missiles.forEach(m => scene.remove(m));
+      missiles.length = 0;
+      jet.position.set(0, 180, 0);
+      jet.rotation.set(0, 0, 0);
+      spawnWave();
+      updateHud();
+    }
+
+    document.getElementById('startBtn').onclick = startGame;
+    document.getElementById('restartBtn').onclick = startGame;
+
     function animate() {
       requestAnimationFrame(animate);
 
-      // Keyboard
+      if (!gameRunning) {
+        renderer.render(scene, camera);
+        return;
+      }
+
       if (keys['w'] || keys['arrowup']) input.pitch = 1;
       else if (keys['s'] || keys['arrowdown']) input.pitch = -1;
       else if (!document.getElementById('btnUp').matches(':active') && !document.getElementById('btnDown').matches(':active')) input.pitch = 0;
@@ -456,22 +604,41 @@
       else if (keys['d'] || keys['arrowright']) input.yaw = -1;
       else if (!document.getElementById('btnLeft').matches(':active') && !document.getElementById('btnRight').matches(':active')) input.yaw = 0;
 
-      // Apply rotation (more responsive)
       jet.rotateX(-input.pitch * 0.018);
       jet.rotateY(input.yaw * 0.025);
-      jet.rotateZ(input.yaw * 0.012); // banking
+      jet.rotateZ(input.yaw * 0.012);
 
-      // Move forward
       const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(jet.quaternion);
       jet.position.add(forward.multiplyScalar(throttle));
       if (jet.position.y < 35) jet.position.y = 35;
 
+      // Enemy AI — pursue and attack
       enemies.forEach(e => {
         if (!e.parent) return;
-        const dir = new THREE.Vector3(1, 0, 0).applyQuaternion(e.quaternion);
-        e.position.add(dir.multiplyScalar(e.userData.speed));
-        e.rotation.y += (Math.random() - 0.5) * 0.008;
+        e.userData.attackCooldown = Math.max(0, e.userData.attackCooldown - 1);
+
+        const toPlayer = jet.position.clone().sub(e.position);
+        const dist = toPlayer.length();
+        toPlayer.normalize();
+
+        // Turn toward player
+        const desired = new THREE.Quaternion();
+        const lookAtMatrix = new THREE.Matrix4().lookAt(e.position, jet.position, new THREE.Vector3(0, 1, 0));
+        desired.setFromRotationMatrix(lookAtMatrix);
+        e.quaternion.slerp(desired, 0.025);
+
+        // Move
+        const eDir = new THREE.Vector3(1, 0, 0).applyQuaternion(e.quaternion);
+        e.position.add(eDir.multiplyScalar(e.userData.speed));
         if (e.position.y < 40) e.position.y = 40;
+
+        // Attack if close and roughly facing
+        if (dist < 180 && e.userData.attackCooldown <= 0) {
+          const facing = new THREE.Vector3(1, 0, 0).applyQuaternion(e.quaternion);
+          if (facing.dot(toPlayer) > 0.6) {
+            enemyFire(e);
+          }
+        }
       });
 
       for (let i = explosions.length - 1; i >= 0; i--) {
@@ -501,14 +668,22 @@
           bullets.splice(i, 1);
           continue;
         }
-        for (let j = enemies.length - 1; j >= 0; j--) {
-          const e = enemies[j];
-          if (b.position.distanceTo(e.position) < 5) {
-            e.userData.health -= 10;
+        if (b.userData.owner === 'player') {
+          for (let j = enemies.length - 1; j >= 0; j--) {
+            const e = enemies[j];
+            if (b.position.distanceTo(e.position) < 5) {
+              e.userData.health -= 10;
+              scene.remove(b);
+              bullets.splice(i, 1);
+              if (e.userData.health <= 0) destroyEnemy(e);
+              break;
+            }
+          }
+        } else {
+          if (b.position.distanceTo(jet.position) < 4) {
+            damagePlayer(8);
             scene.remove(b);
             bullets.splice(i, 1);
-            if (e.userData.health <= 0) destroyEnemy(e);
-            break;
           }
         }
       }
