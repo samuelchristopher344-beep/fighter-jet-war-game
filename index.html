@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fighter Jet War Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #0a0a12; color: #eee; font-family: system-ui, sans-serif; }
+    #hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      font-size: 14px;
+    }
+    #controls {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: auto;
+    }
+    button {
+      background: #1a1a2e;
+      color: #c9a84c;
+      border: 1px solid #c9a84c;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { background: #2a2a40; }
+    #info {
+      position: absolute;
+      bottom: 70px;
+      left: 12px;
+      font-size: 12px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div>ALT: <span id="alt">5000</span> ft &nbsp; SPD: <span id="spd">420</span> kt</div>
+    <div>View: <span id="viewName">External</span></div>
+  </div>
+  <div id="info">WASD / Arrows to fly &nbsp;|&nbsp; C to toggle view &nbsp;|&nbsp; Mouse to look (external)</div>
+  <div id="controls">
+    <button id="toggleView">Switch to Cockpit View</button>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 800, 4000);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // Lights
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(200, 400, 100);
+    sun.castShadow = true;
+    scene.add(sun);
+    scene.add(new THREE.AmbientLight(0x404060, 0.6));
+
+    // Ground / terrain
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(8000, 8000),
+      new THREE.MeshLambertMaterial({ color: 0x3a5f3a })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Simple mountains
+    for (let i = 0; i < 12; i++) {
+      const m = new THREE.Mesh(
+        new THREE.ConeGeometry(80 + Math.random() * 60, 120 + Math.random() * 80, 6),
+        new THREE.MeshLambertMaterial({ color: 0x555555 })
+      );
+      m.position.set((Math.random() - 0.5) * 4000, 40, (Math.random() - 0.5) * 4000);
+      m.castShadow = true;
+      scene.add(m);
+    }
+
+    // Fighter jet (simple group)
+    const jet = new THREE.Group();
+
+    // Fuselage
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 1.2, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0x4a5568, metalness: 0.6, roughness: 0.3 })
+    );
+    body.rotation.z = Math.PI / 2;
+    jet.add(body);
+
+    // Wings
+    const wing = new THREE.Mesh(
+      new THREE.BoxGeometry(6, 0.15, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.5 })
+    );
+    wing.position.set(0, 0, 0);
+    jet.add(wing);
+
+    // Tail
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 1.5, 1.2),
+      new THREE.MeshStandardMaterial({ color: 0x2d3748 })
+    );
+    tail.position.set(-3.5, 0.8, 0);
+    jet.add(tail);
+
+    // Cockpit canopy
+    const canopy = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x1a365d, transparent: true, opacity: 0.7, metalness: 0.8 })
+    );
+    canopy.position.set(1.5, 0.5, 0);
+    canopy.rotation.z = Math.PI / 2;
+    jet.add(canopy);
+
+    jet.position.set(0, 200, 0);
+    scene.add(jet);
+
+    // View state
+    let cockpitView = false;
+    const viewName = document.getElementById('viewName');
+    const toggleBtn = document.getElementById('toggleView');
+
+    function updateView() {
+      if (cockpitView) {
+        // Inside cockpit
+        camera.position.set(1.8, 0.6, 0);
+        camera.rotation.set(0, 0, 0);
+        jet.add(camera);
+        viewName.textContent = 'Cockpit';
+        toggleBtn.textContent = 'Switch to External View';
+      } else {
+        // External chase camera
+        scene.add(camera);
+        camera.position.set(-18, 6, 0);
+        camera.lookAt(jet.position);
+        viewName.textContent = 'External';
+        toggleBtn.textContent = 'Switch to Cockpit View';
+      }
+    }
+    updateView();
+
+    toggleBtn.onclick = () => {
+      cockpitView = !cockpitView;
+      updateView();
+    };
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'c') {
+        cockpitView = !cockpitView;
+        updateView();
+      }
+    });
+
+    // Simple flight controls
+    const keys = {};
+    document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+    document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+    let velocity = new THREE.Vector3(0, 0, 0);
+    const speed = 1.2;
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Controls
+      if (keys['w'] || keys['arrowup']) jet.rotation.x -= 0.008;
+      if (keys['s'] || keys['arrowdown']) jet.rotation.x += 0.008;
+      if (keys['a'] || keys['arrowleft']) jet.rotation.y += 0.012;
+      if (keys['d'] || keys['arrowright']) jet.rotation.y -= 0.012;
+
+      // Move forward
+      const forward = new THREE.Vector3(1, 0, 0);
+      forward.applyQuaternion(jet.quaternion);
+      jet.position.add(forward.multiplyScalar(speed));
+
+      // Keep above ground
+      if (jet.position.y < 20) jet.position.y = 20;
+
+      // Update HUD
+      document.getElementById('alt').textContent = Math.round(jet.position.y * 10);
+      document.getElementById('spd').textContent = Math.round(speed * 350);
+
+      // External camera follow
+      if (!cockpitView) {
+        const offset = new THREE.Vector3(-18, 6, 0);
+        offset.applyQuaternion(jet.quaternion);
+        camera.position.copy(jet.position).add(offset);
+        camera.lookAt(jet.position);
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
