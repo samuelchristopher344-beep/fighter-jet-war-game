@@ -2,11 +2,19 @@
 
 Browser-based semi-realistic fighter jet war game with **cockpit view** and **external view**.
 
+## Play the game
+
+**GitHub Pages (when enabled):**  
+https://samuelchristopher344-beep.github.io/fighter-jet-war-game/
+
+**Or open the file locally:** download/open `index.html` in a modern browser.
+
 ## Current Features
-- Simple fighter jet you can fly
-- Toggle between Cockpit view and External chase view (button or press **C**)
-- Basic flight controls
-- HUD showing altitude and speed
+- Detailed fighter jet models (player + enemies)
+- Cockpit view and external chase view (toggle with **C** or button)
+- Cannon + heat-seeking missiles with lock-on (**L**)
+- Radar, explosions, score, engine glow
+- Better terrain (water, mountains, buildings)
 
 ## Controls
 - **W / Arrow Up** — Pitch up
@@ -14,15 +22,12 @@ Browser-based semi-realistic fighter jet war game with **cockpit view** and **ex
 - **A / Arrow Left** — Turn left
 - **D / Arrow Right** — Turn right
 - **C** — Toggle cockpit / external view
+- **Space** — Fire gun
+- **M** — Fire missile
+- **L** — Cycle lock target
 
-## How to Run
-Open `index.html` in a modern browser, or deploy the repo to Vercel / Netlify / GitHub Pages.
+## Deploy
+- **GitHub Pages:** Settings → Pages → Source: GitHub Actions (workflow already added).
+- **Vercel:** Import the repo as a **new separate project** (do not add to the business card project).
 
-## Next Steps
-- Better jet model
-- Enemy aircraft and combat
-- Missions
-- Realistic weapons and radar
-- Improved terrain and weather
-
-Built with Three.js.
+Built with Three.js. Separate from the digital business card.
