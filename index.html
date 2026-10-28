@@ -24,6 +24,28 @@
       font-size: 13px;
       color: #c9a84c;
     }
+    #scoreHud {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      font-size: 16px;
+      color: #fff;
+      text-shadow: 0 0 4px #000;
+    }
+    #radar {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      width: 140px;
+      height: 140px;
+      background: rgba(0, 20, 0, 0.7);
+      border: 2px solid #0f0;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    #radar canvas { width: 100%; height: 100%; }
     #controls {
       position: absolute;
       bottom: 16px;
@@ -58,11 +80,13 @@
     <div>ALT: <span id="alt">5000</span> ft &nbsp; SPD: <span id="spd">420</span> kt</div>
     <div>View: <span id="viewName">External</span></div>
   </div>
+  <div id="scoreHud">SCORE: <span id="score">0</span></div>
   <div id="weaponHud">
     GUN: <span id="gunAmmo">500</span> &nbsp;|&nbsp;
     MSL: <span id="mslCount">4</span> &nbsp;|&nbsp;
     <span id="lockStatus">No lock</span>
   </div>
+  <div id="radar"><canvas id="radarCanvas" width="140" height="140"></canvas></div>
   <div id="info">WASD to fly &nbsp;|&nbsp; C view &nbsp;|&nbsp; Space = gun &nbsp;|&nbsp; M = missile &nbsp;|&nbsp; L = cycle lock</div>
   <div id="controls">
     <button id="toggleView">Switch to Cockpit View</button>
@@ -80,58 +104,80 @@
     import * as THREE from 'three';
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 800, 4000);
+    scene.background = new THREE.Color(0x6a9bd1);
+    scene.fog = new THREE.Fog(0x6a9bd1, 600, 5000);
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 12000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-    sun.position.set(200, 400, 100);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.3);
+    sun.position.set(300, 500, 150);
     sun.castShadow = true;
     scene.add(sun);
-    scene.add(new THREE.AmbientLight(0x404060, 0.6));
+    scene.add(new THREE.AmbientLight(0x404060, 0.55));
 
+    // Better terrain
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(8000, 8000),
-      new THREE.MeshLambertMaterial({ color: 0x3a5f3a })
+      new THREE.PlaneGeometry(12000, 12000, 40, 40),
+      new THREE.MeshLambertMaterial({ color: 0x4a7c4a, flatShading: true })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    for (let i = 0; i < 12; i++) {
-      const m = new THREE.Mesh(
-        new THREE.ConeGeometry(80 + Math.random() * 60, 120 + Math.random() * 80, 6),
-        new THREE.MeshLambertMaterial({ color: 0x555555 })
+    // Water patches
+    for (let i = 0; i < 5; i++) {
+      const water = new THREE.Mesh(
+        new THREE.CircleGeometry(120 + Math.random() * 100, 16),
+        new THREE.MeshLambertMaterial({ color: 0x2a6a8a, transparent: true, opacity: 0.85 })
       );
-      m.position.set((Math.random() - 0.5) * 4000, 40, (Math.random() - 0.5) * 4000);
+      water.rotation.x = -Math.PI / 2;
+      water.position.set((Math.random() - 0.5) * 6000, 0.5, (Math.random() - 0.5) * 6000);
+      scene.add(water);
+    }
+
+    // Mountains
+    for (let i = 0; i < 18; i++) {
+      const h = 100 + Math.random() * 180;
+      const m = new THREE.Mesh(
+        new THREE.ConeGeometry(60 + Math.random() * 80, h, 7),
+        new THREE.MeshLambertMaterial({ color: 0x6b6b6b, flatShading: true })
+      );
+      m.position.set((Math.random() - 0.5) * 7000, h / 2, (Math.random() - 0.5) * 7000);
       m.castShadow = true;
       scene.add(m);
     }
 
-    // Better fighter jet model
+    // Small buildings / city blocks
+    for (let i = 0; i < 15; i++) {
+      const b = new THREE.Mesh(
+        new THREE.BoxGeometry(20 + Math.random() * 30, 30 + Math.random() * 50, 20 + Math.random() * 30),
+        new THREE.MeshLambertMaterial({ color: 0x888888 })
+      );
+      b.position.set((Math.random() - 0.5) * 5000, 20, (Math.random() - 0.5) * 5000);
+      b.castShadow = true;
+      scene.add(b);
+    }
+
+    // Fighter jet model
     function createFighterJet(color = 0x4a5568, accent = 0x2d3748) {
       const jet = new THREE.Group();
       const metal = new THREE.MeshStandardMaterial({ color, metalness: 0.7, roughness: 0.25 });
       const dark = new THREE.MeshStandardMaterial({ color: accent, metalness: 0.5, roughness: 0.4 });
       const glass = new THREE.MeshStandardMaterial({ color: 0x1a365d, transparent: true, opacity: 0.65, metalness: 0.9, roughness: 0.1 });
 
-      // Main fuselage (tapered)
       const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.9, 9, 10), metal);
       fuse.rotation.z = Math.PI / 2;
       jet.add(fuse);
 
-      // Nose cone
       const nose = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.2, 8), metal);
       nose.rotation.z = -Math.PI / 2;
       nose.position.set(5.5, 0, 0);
       jet.add(nose);
 
-      // Wings (swept)
       const wingGeo = new THREE.BoxGeometry(5.5, 0.12, 2.2);
       const leftWing = new THREE.Mesh(wingGeo, dark);
       leftWing.position.set(-0.5, 0, -1.8);
@@ -142,7 +188,6 @@
       rightWing.rotation.y = 0.25;
       jet.add(rightWing);
 
-      // Wing tips
       const tip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), dark);
       tip.position.set(-2.8, 0.2, -3.6);
       jet.add(tip);
@@ -150,12 +195,10 @@
       tip2.position.z = 3.6;
       jet.add(tip2);
 
-      // Vertical stabilizer
       const vtail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.8, 1.4), dark);
       vtail.position.set(-4.2, 1.1, 0);
       jet.add(vtail);
 
-      // Horizontal stabilizers
       const htail = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 0.6), dark);
       htail.position.set(-4.0, 0.3, -1.2);
       jet.add(htail);
@@ -163,7 +206,6 @@
       htail2.position.z = 1.2;
       jet.add(htail2);
 
-      // Canopy
       const canopy = new THREE.Mesh(
         new THREE.SphereGeometry(0.65, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2.2),
         glass
@@ -172,7 +214,6 @@
       canopy.rotation.z = Math.PI / 2;
       jet.add(canopy);
 
-      // Engine exhausts
       const exhaust = new THREE.Mesh(
         new THREE.CylinderGeometry(0.35, 0.45, 0.8, 8),
         new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 })
@@ -181,23 +222,22 @@
       exhaust.position.set(-4.6, 0, 0);
       jet.add(exhaust);
 
-      // Intake
-      const intake = new THREE.Mesh(
-        new THREE.BoxGeometry(1.2, 0.5, 0.8),
-        dark
-      );
+      // Engine glow
+      const glow = new THREE.PointLight(0xff4400, 1.5, 8);
+      glow.position.set(-5.0, 0, 0);
+      jet.add(glow);
+
+      const intake = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 0.8), dark);
       intake.position.set(1.5, -0.4, 0);
       jet.add(intake);
 
       return jet;
     }
 
-    // Player jet
     const jet = createFighterJet(0x4a5568, 0x2d3748);
     jet.position.set(0, 200, 0);
     scene.add(jet);
 
-    // Enemy jets
     const enemies = [];
     function createEnemy(x, y, z) {
       const e = createFighterJet(0x8b0000, 0x5a0000);
@@ -210,6 +250,27 @@
     createEnemy(300, 250, 200);
     createEnemy(-400, 180, -300);
     createEnemy(100, 300, -500);
+    createEnemy(600, 220, -200);
+
+    // Explosions
+    const explosions = [];
+    function createExplosion(pos) {
+      const group = new THREE.Group();
+      group.position.copy(pos);
+      for (let i = 0; i < 12; i++) {
+        const p = new THREE.Mesh(
+          new THREE.SphereGeometry(0.4 + Math.random() * 0.6, 6, 6),
+          new THREE.MeshBasicMaterial({ color: Math.random() > 0.5 ? 0xff4400 : 0xffaa00 })
+        );
+        p.userData = {
+          vel: new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4),
+          life: 30 + Math.random() * 20
+        };
+        group.add(p);
+      }
+      scene.add(group);
+      explosions.push(group);
+    }
 
     // Weapons
     const bullets = [];
@@ -218,10 +279,12 @@
     let missileCount = 4;
     let lockedTarget = null;
     let lockIndex = 0;
+    let score = 0;
 
     function updateWeaponHud() {
       document.getElementById('gunAmmo').textContent = gunAmmo;
       document.getElementById('mslCount').textContent = missileCount;
+      document.getElementById('score').textContent = score;
       const lockEl = document.getElementById('lockStatus');
       if (lockedTarget) {
         lockEl.textContent = 'LOCK';
@@ -277,6 +340,61 @@
       lockIndex = (lockIndex + 1) % enemies.length;
       lockedTarget = enemies[lockIndex];
       updateWeaponHud();
+    }
+
+    function destroyEnemy(e) {
+      createExplosion(e.position);
+      scene.remove(e);
+      const idx = enemies.indexOf(e);
+      if (idx >= 0) enemies.splice(idx, 1);
+      score += 100;
+      if (lockedTarget === e) {
+        lockedTarget = null;
+      }
+      updateWeaponHud();
+      // Respawn a new one
+      setTimeout(() => {
+        createEnemy(
+          (Math.random() - 0.5) * 2000,
+          150 + Math.random() * 200,
+          (Math.random() - 0.5) * 2000
+        );
+      }, 3000);
+    }
+
+    // Radar
+    const radarCtx = document.getElementById('radarCanvas').getContext('2d');
+    function drawRadar() {
+      const c = radarCtx;
+      const s = 140;
+      c.clearRect(0, 0, s, s);
+      c.strokeStyle = '#0f0';
+      c.lineWidth = 1;
+      c.beginPath();
+      c.arc(s/2, s/2, s/2 - 2, 0, Math.PI * 2);
+      c.stroke();
+      c.beginPath();
+      c.arc(s/2, s/2, s/4, 0, Math.PI * 2);
+      c.stroke();
+
+      // Player
+      c.fillStyle = '#0f0';
+      c.fillRect(s/2 - 2, s/2 - 2, 4, 4);
+
+      // Enemies relative
+      const range = 800;
+      enemies.forEach(e => {
+        const dx = (e.position.x - jet.position.x) / range * (s/2);
+        const dz = (e.position.z - jet.position.z) / range * (s/2);
+        const rx = s/2 + dx;
+        const ry = s/2 + dz;
+        if (rx > 4 && rx < s-4 && ry > 4 && ry < s-4) {
+          c.fillStyle = '#f44';
+          c.beginPath();
+          c.arc(rx, ry, 3, 0, Math.PI * 2);
+          c.fill();
+        }
+      });
     }
 
     // View
@@ -335,6 +453,25 @@
         if (e.position.y < 30) e.position.y = 30;
       });
 
+      // Explosions
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        const g = explosions[i];
+        let alive = false;
+        g.children.forEach(p => {
+          if (p.userData.life > 0) {
+            p.position.add(p.userData.vel);
+            p.userData.vel.y -= 0.05;
+            p.userData.life--;
+            p.scale.multiplyScalar(0.97);
+            alive = true;
+          }
+        });
+        if (!alive) {
+          scene.remove(g);
+          explosions.splice(i, 1);
+        }
+      }
+
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.position.add(b.userData.velocity);
@@ -350,14 +487,7 @@
             e.userData.health -= 10;
             scene.remove(b);
             bullets.splice(i, 1);
-            if (e.userData.health <= 0) {
-              scene.remove(e);
-              enemies.splice(j, 1);
-              if (lockedTarget === e) {
-                lockedTarget = null;
-                updateWeaponHud();
-              }
-            }
+            if (e.userData.health <= 0) destroyEnemy(e);
             break;
           }
         }
@@ -392,14 +522,9 @@
         for (let j = enemies.length - 1; j >= 0; j--) {
           const e = enemies[j];
           if (m.position.distanceTo(e.position) < 7) {
-            scene.remove(e);
+            destroyEnemy(e);
             scene.remove(m);
-            enemies.splice(j, 1);
             missiles.splice(i, 1);
-            if (lockedTarget === e) {
-              lockedTarget = null;
-              updateWeaponHud();
-            }
             break;
           }
         }
@@ -407,6 +532,7 @@
 
       document.getElementById('alt').textContent = Math.round(jet.position.y * 10);
       document.getElementById('spd').textContent = Math.round(speed * 350);
+      drawRadar();
 
       if (!cockpitView) {
         const offset = new THREE.Vector3(-22, 7, 0).applyQuaternion(jet.quaternion);
