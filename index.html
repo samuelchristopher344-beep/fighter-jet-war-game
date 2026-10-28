@@ -9,47 +9,103 @@
     #menu {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, #0a1628 0%, #1a2a40 100%);
+      background: linear-gradient(180deg, #0c1424 0%, #162030 100%);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
       z-index: 100;
     }
-    #menu h1 { font-size: 28px; margin-bottom: 8px; color: #c9a84c; }
-    #menu p { opacity: 0.8; margin-bottom: 16px; text-align: center; max-width: 280px; }
-    #playerName, #roomCode {
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: 1px solid #c9a84c;
-      background: #1a1a2e;
-      color: #eee;
-      font-size: 16px;
-      margin-bottom: 12px;
-      width: 220px;
+    #menuHeader {
+      padding: 20px;
+      background: rgba(0,0,0,0.4);
+      border-bottom: 2px solid #c9a84c;
       text-align: center;
     }
-    #startBtn, #joinBtn {
-      padding: 14px 40px;
+    #menuHeader h1 { margin: 0; font-size: 26px; color: #c9a84c; letter-spacing: 2px; }
+    #menuHeader p { margin: 4px 0 0; font-size: 13px; opacity: 0.7; }
+    #lobbyArea {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+    }
+    #connectBox {
+      background: rgba(20,30,50,0.8);
+      border: 1px solid #3a4a6a;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    #connectBox input {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      border: 1px solid #c9a84c;
+      background: #1a2233;
+      color: #eee;
+      font-size: 15px;
+      box-sizing: border-box;
+    }
+    #connectBtns { display: flex; gap: 8px; }
+    #connectBtns button {
+      flex: 1;
+      padding: 12px;
       background: #c9a84c;
       color: #0a0a12;
       border: none;
-      border-radius: 10px;
-      font-size: 18px;
+      border-radius: 6px;
       font-weight: bold;
+      font-size: 15px;
       cursor: pointer;
-      margin: 6px;
     }
-    #status {
-      margin-top: 12px;
+    #playerListBox {
+      flex: 1;
+      background: rgba(20,30,50,0.8);
+      border: 1px solid #3a4a6a;
+      border-radius: 10px;
+      padding: 12px;
+      overflow-y: auto;
+    }
+    #playerListBox h3 { margin: 0 0 10px; font-size: 14px; color: #c9a84c; }
+    .playerRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 6px;
+      margin-bottom: 6px;
       font-size: 14px;
+    }
+    .ready { color: #4caf50; font-weight: bold; }
+    .notReady { color: #ff9800; }
+    #lobbyFooter {
+      padding: 12px 16px;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      gap: 10px;
+    }
+    #readyBtn, #launchBtn {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #readyBtn { background: #2a4a2a; color: #4caf50; border: 1px solid #4caf50; }
+    #launchBtn { background: #c9a84c; color: #0a0a12; }
+    #status {
+      text-align: center;
+      font-size: 13px;
       color: #c9a84c;
-      min-height: 20px;
+      min-height: 18px;
     }
     #gameOver {
       position: absolute;
       inset: 0;
-      background: rgba(0,0,0,0.75);
+      background: rgba(0,0,0,0.8);
       display: none;
       flex-direction: column;
       align-items: center;
@@ -57,7 +113,7 @@
       z-index: 99;
     }
     #gameOver h2 { color: #ff4444; font-size: 32px; }
-    #hud, #weaponHud, #scoreHud, #reticle, #radar, #controls, #info, #healthBar { display: none; }
+    #hud, #weaponHud, #scoreHud, #reticle, #radar, #controls, #info, #healthBar, #playerCount { display: none; }
     #hud {
       position: absolute;
       top: 12px;
@@ -179,19 +235,33 @@
 </head>
 <body>
   <div id="menu">
-    <h1>Fighter Jet War</h1>
-    <p>Enter name and room code. Share the code so others can join.</p>
-    <input id="playerName" placeholder="Pilot name" maxlength="16" />
-    <input id="roomCode" placeholder="Room code (e.g. WAR1)" maxlength="12" />
-    <div>
-      <button id="startBtn">Create / Join Room</button>
+    <div id="menuHeader">
+      <h1>FIGHTER JET WAR</h1>
+      <p>MULTIPLAYER LOBBY</p>
     </div>
-    <div id="status">Waiting...</div>
+    <div id="lobbyArea">
+      <div id="connectBox">
+        <input id="playerName" placeholder="Enter Callsign" maxlength="16" />
+        <input id="roomCode" placeholder="Room Code (e.g. WAR1)" maxlength="12" />
+        <div id="connectBtns">
+          <button id="joinBtn">JOIN LOBBY</button>
+        </div>
+        <div id="status">Enter name and room code</div>
+      </div>
+      <div id="playerListBox">
+        <h3>PLAYERS IN LOBBY</h3>
+        <div id="playerList"></div>
+      </div>
+    </div>
+    <div id="lobbyFooter">
+      <button id="readyBtn">READY</button>
+      <button id="launchBtn">LAUNCH</button>
+    </div>
   </div>
   <div id="gameOver">
     <h2>MISSION FAILED</h2>
     <p id="finalScore">Score: 0</p>
-    <button id="restartBtn" style="padding:12px 28px; background:#c9a84c; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Back to Menu</button>
+    <button id="restartBtn" style="padding:12px 28px; background:#c9a84c; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">BACK TO LOBBY</button>
   </div>
   <div id="playerCount">Players: 1</div>
   <div id="hud">
@@ -235,7 +305,9 @@
     let myId = null;
     let room = 'WAR1';
     let ws = null;
+    let isReady = false;
     const remotePlayers = new Map();
+    const lobbyPlayers = new Map();
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x5a8cc0);
@@ -391,6 +463,17 @@
       document.getElementById('healthFill').style.width = Math.max(0, playerHealth) + '%';
       document.getElementById('healthFill').style.background = playerHealth > 40 ? '#4caf50' : '#ff4444';
       document.getElementById('playerCount').textContent = 'Players: ' + (remotePlayers.size + 1);
+    }
+
+    function updatePlayerList() {
+      const list = document.getElementById('playerList');
+      list.innerHTML = '';
+      lobbyPlayers.forEach((p, id) => {
+        const row = document.createElement('div');
+        row.className = 'playerRow';
+        row.innerHTML = '<span>' + (p.name || 'Pilot') + (id === myId ? ' (YOU)' : '') + '</span><span class="' + (p.ready ? 'ready' : 'notReady') + '">' + (p.ready ? 'READY' : 'NOT READY') + '</span>';
+        list.appendChild(row);
+      });
     }
 
     function fireGun() {
@@ -562,30 +645,20 @@
     });
     document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
-    // Multiplayer via free public WebSocket relay (js13k style / echo for demo)
     function connectMultiplayer(roomCode) {
       room = roomCode || 'WAR1';
       const status = document.getElementById('status');
-      status.textContent = 'Connecting to room ' + room + '...';
+      status.textContent = 'Connecting to ' + room + '...';
 
-      // Using a free public WebSocket echo/relay for demo
-      // For production, replace with PartyKit or your own server
       const url = 'wss://echo.websocket.org';
       ws = new WebSocket(url);
 
       ws.onopen = () => {
         myId = 'p' + Math.floor(Math.random() * 10000);
-        status.textContent = 'Connected! Room: ' + room + ' | ID: ' + myId;
-        send({ type: 'join', id: myId, name: playerName, room });
-        setTimeout(() => {
-          document.getElementById('menu').style.display = 'none';
-          ['hud','weaponHud','scoreHud','reticle','radar','controls','info','healthBar','playerCount'].forEach(id => {
-            document.getElementById(id).style.display = '';
-          });
-          gameRunning = true;
-          spawnWave();
-          updateHud();
-        }, 800);
+        lobbyPlayers.set(myId, { name: playerName, ready: false });
+        status.textContent = 'In lobby: ' + room;
+        send({ type: 'lobby', action: 'join', name: playerName });
+        updatePlayerList();
       };
 
       ws.onmessage = (event) => {
@@ -593,7 +666,15 @@
           const data = JSON.parse(event.data);
           if (data.id === myId) return;
 
-          if (data.type === 'state') {
+          if (data.type === 'lobby') {
+            if (data.action === 'join') {
+              lobbyPlayers.set(data.id, { name: data.name || 'Pilot', ready: false });
+              updatePlayerList();
+            } else if (data.action === 'ready') {
+              const p = lobbyPlayers.get(data.id);
+              if (p) { p.ready = data.ready; updatePlayerList(); }
+            }
+          } else if (data.type === 'state') {
             let rp = remotePlayers.get(data.id);
             if (!rp) {
               const mesh = createFighterJet(0x2a6aaa, 0x1a4a7a);
@@ -609,19 +690,19 @@
             bullet.userData = { velocity: new THREE.Vector3().fromArray(data.dir).multiplyScalar(9), life: 60, owner: 'remote' };
             scene.add(bullet);
             bullets.push(bullet);
-          } else if (data.type === 'join') {
-            status.textContent = data.name + ' joined the room';
+          } else if (data.type === 'launch') {
+            startMission();
           }
         } catch (e) {}
       };
 
       ws.onerror = () => {
-        status.textContent = 'Connection failed. Using local mode.';
+        status.textContent = 'Connection failed. Starting local.';
         setTimeout(startLocal, 1000);
       };
 
       ws.onclose = () => {
-        if (gameRunning) status.textContent = 'Disconnected';
+        if (!gameRunning) status.textContent = 'Disconnected';
       };
     }
 
@@ -632,6 +713,10 @@
     }
 
     function startLocal() {
+      startMission();
+    }
+
+    function startMission() {
       document.getElementById('menu').style.display = 'none';
       ['hud','weaponHud','scoreHud','reticle','radar','controls','info','healthBar','playerCount'].forEach(id => {
         document.getElementById(id).style.display = '';
@@ -641,13 +726,28 @@
       updateHud();
     }
 
-    function startGame() {
+    function joinLobby() {
       playerName = document.getElementById('playerName').value.trim() || 'Pilot';
       const code = document.getElementById('roomCode').value.trim() || 'WAR1';
       connectMultiplayer(code);
     }
 
-    document.getElementById('startBtn').onclick = startGame;
+    document.getElementById('joinBtn').onclick = joinLobby;
+
+    document.getElementById('readyBtn').onclick = () => {
+      isReady = !isReady;
+      const p = lobbyPlayers.get(myId);
+      if (p) p.ready = isReady;
+      updatePlayerList();
+      send({ type: 'lobby', action: 'ready', ready: isReady });
+      document.getElementById('readyBtn').textContent = isReady ? 'UNREADY' : 'READY';
+    };
+
+    document.getElementById('launchBtn').onclick = () => {
+      send({ type: 'launch' });
+      startMission();
+    };
+
     document.getElementById('restartBtn').onclick = () => {
       location.reload();
     };
@@ -677,7 +777,6 @@
       jet.position.add(forward.multiplyScalar(throttle));
       if (jet.position.y < 35) jet.position.y = 35;
 
-      // Send state ~10 times per second
       const now = Date.now();
       if (now - lastSend > 100) {
         send({
