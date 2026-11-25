@@ -1,13 +1,20 @@
 // src/game/sim.ts
-import * as THREE3 from "three";
+import * as THREE4 from "three";
 
 // src/game/jet.ts
 import * as THREE from "three";
-function paintMaterial(color) {
-  return new THREE.MeshStandardMaterial({
+var skinMap = null;
+function useSkin(map) {
+  skinMap = map;
+}
+function paintMaterial(color, mapped = true) {
+  return new THREE.MeshPhysicalMaterial({
     color,
-    metalness: 0.72,
-    roughness: 0.36,
+    map: mapped ? skinMap : null,
+    metalness: mapped ? 0.78 : 0.45,
+    roughness: mapped ? 0.34 : 0.55,
+    clearcoat: mapped ? 0.55 : 0,
+    clearcoatRoughness: 0.28,
     side: THREE.DoubleSide
   });
 }
@@ -74,16 +81,27 @@ function wing(sign, material) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
   geo.computeVertexNormals();
+  const pos = geo.attributes.position;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    uv[i * 2] = pos.getX(i) * 0.07 + 0.5;
+    uv[i * 2 + 1] = pos.getZ(i) * 0.05 + 0.5;
+  }
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
   return new THREE.Mesh(geo, material);
 }
 function makeScreen(w, h) {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas");
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(w, h),
     new THREE.MeshBasicMaterial({ map: tex })
@@ -95,8 +113,8 @@ function createJet(kind, number) {
   const root = new THREE.Group();
   const exterior = new THREE.Group();
   root.add(exterior);
-  const paint = paintMaterial(kind === "own" ? 8160911 : 6968140);
-  const dark = paintMaterial(1711910);
+  const paint = paintMaterial(kind === "own" ? 16777215 : 14996166);
+  const dark = paintMaterial(10134445);
   const hot = new THREE.MeshStandardMaterial({
     color: 2761762,
     metalness: 0.8,
@@ -114,7 +132,7 @@ function createJet(kind, number) {
     new THREE.Vector2(0.22, -8.7),
     new THREE.Vector2(0.05, -9.15)
   ];
-  const fuse = new THREE.LatheGeometry(profile, 18);
+  const fuse = new THREE.LatheGeometry(profile, 40);
   fuse.rotateX(Math.PI / 2);
   exterior.add(new THREE.Mesh(fuse, paint));
   exterior.add(wing(1, paint));
@@ -190,8 +208,8 @@ function createJet(kind, number) {
     cockpit = new THREE.Group();
     cockpit.visible = false;
     root.add(cockpit);
-    const frame = paintMaterial(1185308);
-    const consoleMat = paintMaterial(1844012);
+    const frame = paintMaterial(1316894, false);
+    const consoleMat = paintMaterial(2238513, false);
     const floor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.08, 2.2), frame);
     floor.position.set(0, -0.02, 2.5);
     cockpit.add(floor);
@@ -237,11 +255,15 @@ function createJet(kind, number) {
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.42, 8), frame);
     shaft.position.y = 0.16;
     stick2.add(shaft);
-    const grip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), paintMaterial(2764856));
+    const grip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), paintMaterial(2764856, false));
     grip.position.y = 0.38;
     stick2.add(grip);
     cockpit.add(stick2);
   }
+  exterior.traverse((obj) => {
+    const mesh = obj;
+    if (mesh.isMesh) mesh.castShadow = true;
+  });
   return { root, exterior, cockpit, glows, stick: stick2, screens };
 }
 
@@ -285,29 +307,50 @@ function terrainHeight(x, z) {
   if (h < 40) h = 40 - (40 - h) * 0.05;
   return h;
 }
-function createWorld(scene) {
-  scene.background = new THREE2.Color(7976164);
-  scene.fog = new THREE2.Fog(12967410, 2800, 12e3);
-  const hemi = new THREE2.HemisphereLight(14150911, 6969925, 1.15);
+function createWorld(scene, look) {
+  scene.background = new THREE2.Color(9357551);
+  scene.fog = new THREE2.Fog(12966122, 9e3, 17e3);
+  const hemi = new THREE2.HemisphereLight(15201279, 6969925, 0.85);
   scene.add(hemi);
-  const sun = new THREE2.DirectionalLight(16774368, 2.4);
-  sun.position.set(-1800, 2600, 900);
+  const sun = new THREE2.DirectionalLight(16774888, 2.6);
+  sun.position.set(-80, 120, 40);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.near = 10;
+  sun.shadow.camera.far = 280;
+  sun.shadow.camera.left = -70;
+  sun.shadow.camera.right = 70;
+  sun.shadow.camera.top = 70;
+  sun.shadow.camera.bottom = -70;
+  sun.shadow.bias = -4e-4;
   scene.add(sun);
-  const geo = new THREE2.PlaneGeometry(18e3, 18e3, 128, 128);
+  scene.add(sun.target);
+  let sky = null;
+  if (look?.sky) {
+    sky = new THREE2.Mesh(
+      new THREE2.SphereGeometry(14e3, 48, 32),
+      new THREE2.MeshBasicMaterial({ map: look.sky, side: THREE2.BackSide, depthWrite: false })
+    );
+    sky.frustumCulled = false;
+    scene.add(sky);
+  }
+  const geo = new THREE2.PlaneGeometry(18e3, 18e3, 160, 160);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   const color = new THREE2.Color();
+  const tint = new THREE2.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
     const h = terrainHeight(x, z);
     pos.setY(i, h);
-    if (h < 48) color.set(1860228);
-    else if (h < 180) color.set(7240261);
-    else if (h < 520) color.set(6122046);
-    else if (h < 760) color.set(7169368);
-    else color.set(12962254);
+    if (h < 48) tint.set(9425130);
+    else if (h < 180) tint.set(16777215);
+    else if (h < 520) tint.set(15921382);
+    else if (h < 760) tint.set(15196890);
+    else tint.set(16777215);
+    color.copy(tint);
     colors[i * 3] = color.r;
     colors[i * 3 + 1] = color.g;
     colors[i * 3 + 2] = color.b;
@@ -316,47 +359,72 @@ function createWorld(scene) {
   geo.computeVertexNormals();
   const terrain = new THREE2.Mesh(
     geo,
-    new THREE2.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0.02 })
+    new THREE2.MeshStandardMaterial({
+      map: look?.ground ?? null,
+      vertexColors: true,
+      roughness: 0.86,
+      metalness: 0.02
+    })
   );
+  terrain.receiveShadow = true;
   terrain.matrixAutoUpdate = false;
   terrain.updateMatrix();
   scene.add(terrain);
   const water = new THREE2.Mesh(
     new THREE2.PlaneGeometry(18e3, 18e3),
-    new THREE2.MeshStandardMaterial({
-      color: 1729158,
+    new THREE2.MeshPhysicalMaterial({
+      color: 1603752,
       metalness: 0.55,
-      roughness: 0.22,
+      roughness: 0.06,
       transparent: true,
-      opacity: 0.88
+      opacity: 0.9
     })
   );
   water.rotation.x = -Math.PI / 2;
   water.position.y = 42;
   scene.add(water);
-  const cloudGeo = new THREE2.SphereGeometry(1, 6, 5);
+  const cloudGeo = new THREE2.SphereGeometry(1, 8, 6);
   const cloudMat = new THREE2.MeshStandardMaterial({
-    color: 16251903,
+    color: 16777215,
     roughness: 1,
     transparent: true,
-    opacity: 0.72,
+    opacity: 0.42,
     depthWrite: false
   });
-  const clouds = new THREE2.InstancedMesh(cloudGeo, cloudMat, 80);
+  const clouds = new THREE2.InstancedMesh(cloudGeo, cloudMat, 48);
   const dummy = new THREE2.Object3D();
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 48; i++) {
     const ang = Math.random() * Math.PI * 2;
-    const rad = 400 + Math.random() * 7e3;
-    dummy.position.set(Math.cos(ang) * rad, 1400 + Math.random() * 2200, Math.sin(ang) * rad);
-    const s = 180 + Math.random() * 520;
-    dummy.scale.set(s, s * (0.28 + Math.random() * 0.22), s * (0.7 + Math.random() * 0.5));
+    const rad = 800 + Math.random() * 6400;
+    dummy.position.set(Math.cos(ang) * rad, 1800 + Math.random() * 1600, Math.sin(ang) * rad);
+    const s = 220 + Math.random() * 480;
+    dummy.scale.set(s, s * 0.22, s * 0.72);
     dummy.rotation.y = Math.random() * Math.PI;
     dummy.updateMatrix();
     clouds.setMatrixAt(i, dummy.matrix);
   }
   clouds.instanceMatrix.needsUpdate = true;
   scene.add(clouds);
-  return { terrain, clouds };
+  return { terrain, clouds, sky, sun };
+}
+
+// src/game/look.ts
+import * as THREE3 from "three";
+function prep(url, repeatX, repeatY, wrap) {
+  const tex = new THREE3.TextureLoader().load(url);
+  tex.colorSpace = THREE3.SRGBColorSpace;
+  tex.wrapS = wrap;
+  tex.wrapT = wrap;
+  tex.anisotropy = 16;
+  tex.repeat.set(repeatX, repeatY);
+  return tex;
+}
+function loadLook() {
+  return {
+    panel: prep("/textures/panel.jpg", 4, 2, THREE3.RepeatWrapping),
+    ground: prep("/textures/ground.jpg", 32, 32, THREE3.RepeatWrapping),
+    sky: prep("/textures/sky.jpg", 1, 1, THREE3.ClampToEdgeWrapping)
+  };
 }
 
 // src/game/hud.ts
@@ -730,13 +798,14 @@ function paintEngines(screen, m) {
 }
 
 // src/game/sim.ts
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 var BEST_KEY = "sky-vanguard-best";
-var _fwd = new THREE3.Vector3();
-var _up = new THREE3.Vector3();
-var _to = new THREE3.Vector3();
-var _cam = new THREE3.Vector3();
-var _look = new THREE3.Vector3();
-var _ndc = new THREE3.Vector3();
+var _fwd = new THREE4.Vector3();
+var _up = new THREE4.Vector3();
+var _to = new THREE4.Vector3();
+var _cam = new THREE4.Vector3();
+var _look = new THREE4.Vector3();
+var _ndc = new THREE4.Vector3();
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
@@ -744,10 +813,14 @@ function angNorm(a) {
   return Math.atan2(Math.sin(a), Math.cos(a));
 }
 function mountSkyVanguard(host2, hooks) {
-  const renderer = new THREE3.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-  renderer.outputColorSpace = THREE3.SRGBColorSpace;
-  renderer.setClearColor(7976164, 1);
+  const renderer = new THREE4.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputColorSpace = THREE4.SRGBColorSpace;
+  renderer.toneMapping = THREE4.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE4.PCFSoftShadowMap;
+  renderer.setClearColor(9357551, 1);
   host2.appendChild(renderer.domElement);
   const hudCanvas = document.createElement("canvas");
   hudCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";
@@ -755,9 +828,14 @@ function mountSkyVanguard(host2, hooks) {
   const hud2d = hudCanvas.getContext("2d");
   if (!hud2d) throw new Error("hud");
   const hudCtx = hud2d;
-  const scene = new THREE3.Scene();
-  createWorld(scene);
-  const camera = new THREE3.PerspectiveCamera(68, 1, 0.12, 22e3);
+  const scene = new THREE4.Scene();
+  const look = loadLook();
+  const world = createWorld(scene, look);
+  useSkin(look.panel);
+  const pmrem = new THREE4.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
+  const camera = new THREE4.PerspectiveCamera(62, 1, 0.08, 28e3);
   scene.add(camera);
   const player = makeCraft("own", "203", false);
   scene.add(player.rig.root);
@@ -765,16 +843,16 @@ function mountSkyVanguard(host2, hooks) {
   const bandits = [];
   const shots = [];
   for (let i = 0; i < 48; i++) {
-    const mesh = new THREE3.Mesh(
-      new THREE3.BoxGeometry(0.12, 0.12, 2.2),
-      new THREE3.MeshBasicMaterial({ color: i < 36 ? 16769162 : 16742972 })
+    const mesh = new THREE4.Mesh(
+      new THREE4.BoxGeometry(0.12, 0.12, 2.2),
+      new THREE4.MeshBasicMaterial({ color: i < 36 ? 16769162 : 16742972 })
     );
     mesh.visible = false;
     scene.add(mesh);
     shots.push({
       active: false,
-      pos: new THREE3.Vector3(),
-      vel: new THREE3.Vector3(),
+      pos: new THREE4.Vector3(),
+      vel: new THREE4.Vector3(),
       life: 0,
       friendly: i < 36,
       homing: false,
@@ -784,9 +862,9 @@ function mountSkyVanguard(host2, hooks) {
   }
   const booms = [];
   for (let i = 0; i < 8; i++) {
-    const mesh = new THREE3.Mesh(
-      new THREE3.SphereGeometry(1, 10, 8),
-      new THREE3.MeshBasicMaterial({ color: 16746564, transparent: true, opacity: 0.9 })
+    const mesh = new THREE4.Mesh(
+      new THREE4.SphereGeometry(1, 10, 8),
+      new THREE4.MeshBasicMaterial({ color: 16746564, transparent: true, opacity: 0.9 })
     );
     mesh.visible = false;
     scene.add(mesh);
@@ -1064,7 +1142,7 @@ function mountSkyVanguard(host2, hooks) {
   const ro = new ResizeObserver(resize);
   ro.observe(host2);
   resize();
-  const timer = new THREE3.Timer();
+  const timer = new THREE4.Timer();
   timer.connect(document);
   let lastMfd = 0;
   function frame() {
@@ -1083,6 +1161,7 @@ function mountSkyVanguard(host2, hooks) {
       camera.lookAt(p.x, p.y + 0.4, p.z);
       for (const g of player.rig.glows) g.color.setRGB(1, 0.45, 0.15);
       if (engineGain) engineGain.gain.value = 1e-4;
+      dress();
       renderer.render(scene, camera);
       hudCtx.clearRect(0, 0, host2.clientWidth, host2.clientHeight);
       return;
@@ -1278,8 +1357,8 @@ function mountSkyVanguard(host2, hooks) {
       if (!b.alive) continue;
       _to.copy(b.rig.root.position).sub(pPos);
       const dist = _to.length();
-      const world = Math.atan2(_to.x, _to.z);
-      const bearing = angNorm(world - player.meshYaw);
+      const world2 = Math.atan2(_to.x, _to.z);
+      const bearing = angNorm(world2 - player.meshYaw);
       _ndc.copy(b.rig.root.position).project(camera);
       blips.push({
         bearing,
@@ -1329,8 +1408,16 @@ function mountSkyVanguard(host2, hooks) {
       paintMfds(player.rig.screens, model, lastMfd);
     }
     drawHud(hudCtx, w, h, model);
+    dress();
     renderer.render(scene, camera);
     publish();
+  }
+  function dress() {
+    const p = player.rig.root.position;
+    world.sun.position.set(p.x - 90, p.y + 150, p.z + 40);
+    world.sun.target.position.copy(p);
+    world.sun.target.updateMatrixWorld();
+    if (world.sky) world.sky.position.copy(camera.position);
   }
   const prevEdge = /* @__PURE__ */ new Set();
   function edge(code) {
@@ -1412,23 +1499,24 @@ start.addEventListener("click", () => {
   else pending = true;
 });
 var stickId = null;
+var pad2 = stick;
 function stickTo(clientX, clientY) {
-  const bounds = stick.getBoundingClientRect();
+  const bounds = pad2.getBoundingClientRect();
   const x = (clientX - bounds.left) / bounds.width * 2 - 1;
   const y = (clientY - bounds.top) / bounds.height * 2 - 1;
   touch.roll = Math.max(-1, Math.min(1, -x));
   touch.pitch = Math.max(-1, Math.min(1, -y));
 }
-stick.addEventListener("pointerdown", (e) => {
+pad2.addEventListener("pointerdown", (e) => {
   stickId = e.pointerId;
-  stick.setPointerCapture(e.pointerId);
+  pad2.setPointerCapture(e.pointerId);
   stickTo(e.clientX, e.clientY);
 });
-stick.addEventListener("pointermove", (e) => {
+pad2.addEventListener("pointermove", (e) => {
   if (stickId !== e.pointerId) return;
   stickTo(e.clientX, e.clientY);
 });
-stick.addEventListener("pointerup", (e) => {
+pad2.addEventListener("pointerup", (e) => {
   if (stickId !== e.pointerId) return;
   stickId = null;
   touch.roll = 0;
