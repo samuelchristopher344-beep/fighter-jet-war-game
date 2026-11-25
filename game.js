@@ -189,13 +189,45 @@ function createJet(kind, number) {
     exterior.add(missile);
   }
   const glows = [];
+  const flames = [];
   for (const side of [-1, 1]) {
     const mat = new THREE.MeshBasicMaterial({ color: 16738858 });
-    const glow = new THREE.Mesh(new THREE.CircleGeometry(0.3, 16), mat);
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(0.32, 16), mat);
     glow.position.set(0.58 * side, 0.02, -8.94);
     glow.rotation.y = Math.PI;
     exterior.add(glow);
     glows.push(mat);
+    const outerMat = new THREE.MeshBasicMaterial({
+      color: 16734744,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.34, 3.1, 12, 1, true), outerMat);
+    outer.rotation.x = -Math.PI / 2;
+    outer.position.set(0.58 * side, 0.02, -10.5);
+    outer.visible = false;
+    exterior.add(outer);
+    flames.push(outer);
+    const core = new THREE.Mesh(
+      new THREE.ConeGeometry(0.16, 2.1, 8, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 16774084,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide
+      })
+    );
+    core.rotation.x = -Math.PI / 2;
+    core.position.set(0.58 * side, 0.02, -9.9);
+    core.visible = false;
+    core.userData.core = true;
+    exterior.add(core);
+    flames.push(core);
   }
   const pitot = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.1, 6), dark);
   pitot.rotation.x = Math.PI / 2;
@@ -264,7 +296,7 @@ function createJet(kind, number) {
     const mesh = obj;
     if (mesh.isMesh) mesh.castShadow = true;
   });
-  return { root, exterior, cockpit, glows, stick: stick2, screens };
+  return { root, exterior, cockpit, glows, flames, stick: stick2, screens };
 }
 
 // src/game/world.ts
@@ -383,29 +415,68 @@ function createWorld(scene, look) {
   water.rotation.x = -Math.PI / 2;
   water.position.y = 42;
   scene.add(water);
-  const cloudGeo = new THREE2.SphereGeometry(1, 8, 6);
-  const cloudMat = new THREE2.MeshStandardMaterial({
-    color: 16777215,
-    roughness: 1,
-    transparent: true,
-    opacity: 0.42,
-    depthWrite: false
-  });
-  const clouds = new THREE2.InstancedMesh(cloudGeo, cloudMat, 48);
-  const dummy = new THREE2.Object3D();
-  for (let i = 0; i < 48; i++) {
-    const ang = Math.random() * Math.PI * 2;
-    const rad = 800 + Math.random() * 6400;
-    dummy.position.set(Math.cos(ang) * rad, 1800 + Math.random() * 1600, Math.sin(ang) * rad);
-    const s = 220 + Math.random() * 480;
-    dummy.scale.set(s, s * 0.22, s * 0.72);
-    dummy.rotation.y = Math.random() * Math.PI;
-    dummy.updateMatrix();
-    clouds.setMatrixAt(i, dummy.matrix);
+  const puff = document.createElement("canvas");
+  puff.width = 256;
+  puff.height = 256;
+  const pg = puff.getContext("2d");
+  if (pg) {
+    for (let i = 0; i < 7; i++) {
+      const x = 64 + i * 41 % 130;
+      const y = 78 + i * 29 % 90;
+      const r = 46 + i % 3 * 16;
+      const grd = pg.createRadialGradient(x, y, 2, x, y, r);
+      grd.addColorStop(0, "rgba(255,255,255,0.92)");
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      pg.fillStyle = grd;
+      pg.beginPath();
+      pg.arc(x, y, r, 0, Math.PI * 2);
+      pg.fill();
+    }
   }
-  clouds.instanceMatrix.needsUpdate = true;
+  const puffTex = new THREE2.CanvasTexture(puff);
+  puffTex.colorSpace = THREE2.SRGBColorSpace;
+  const cloudMat = new THREE2.SpriteMaterial({
+    map: puffTex,
+    transparent: true,
+    depthWrite: false,
+    opacity: 0.78
+  });
+  const clouds = new THREE2.Group();
+  for (let i = 0; i < 40; i++) {
+    const s = new THREE2.Sprite(cloudMat);
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 500 + Math.random() * 6800;
+    const sc = 320 + Math.random() * 720;
+    s.position.set(Math.cos(ang) * rad, 1500 + Math.random() * 2e3, Math.sin(ang) * rad);
+    s.scale.set(sc, sc * 0.58, 1);
+    clouds.add(s);
+  }
   scene.add(clouds);
-  return { terrain, clouds, sky, sun };
+  const sunGlow = document.createElement("canvas");
+  sunGlow.width = 128;
+  sunGlow.height = 128;
+  const sg = sunGlow.getContext("2d");
+  if (sg) {
+    const g = sg.createRadialGradient(64, 64, 4, 64, 64, 64);
+    g.addColorStop(0, "rgba(255,252,235,1)");
+    g.addColorStop(0.2, "rgba(255,214,120,0.85)");
+    g.addColorStop(1, "rgba(255,160,40,0)");
+    sg.fillStyle = g;
+    sg.fillRect(0, 0, 128, 128);
+  }
+  const sunTex = new THREE2.CanvasTexture(sunGlow);
+  sunTex.colorSpace = THREE2.SRGBColorSpace;
+  const sunDisk = new THREE2.Sprite(
+    new THREE2.SpriteMaterial({
+      map: sunTex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE2.AdditiveBlending
+    })
+  );
+  sunDisk.scale.set(1400, 1400, 1);
+  scene.add(sunDisk);
+  return { terrain, clouds, sky, sun, sunDisk };
 }
 
 // src/game/look.ts
@@ -571,6 +642,14 @@ function drawHud(ctx, w, h, m) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
   }
+  if (m.g > 3.1) {
+    const a = Math.min(0.5, (m.g - 3.1) * 0.16);
+    const vg = ctx.createRadialGradient(w / 2, h / 2, w * 0.22, w / 2, h / 2, w * 0.62);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, `rgba(0,0,0,${a})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, w, h);
+  }
   const cockpit = m.mode === "cockpit";
   const cx = w / 2;
   const cy = cockpit ? h * 0.36 : h * 0.46;
@@ -638,6 +717,53 @@ function drawHud(ctx, w, h, m) {
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
+  if (m.lockSeal > 0.04) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = m.lockSeal > 0.82 ? RED : GREEN;
+    ctx.lineWidth = 1.7;
+    const gap = (1 - m.lockSeal) * Math.PI;
+    ctx.beginPath();
+    ctx.arc(0, 0, 68, gap, Math.PI * 2 - gap);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (m.piperOn) {
+    ctx.save();
+    ctx.translate(m.piperX, m.piperY);
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.moveTo(-14, 0);
+    ctx.lineTo(-5, 0);
+    ctx.moveTo(5, 0);
+    ctx.lineTo(14, 0);
+    ctx.moveTo(0, -14);
+    ctx.lineTo(0, -5);
+    ctx.moveTo(0, 5);
+    ctx.lineTo(0, 14);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (m.mark > 0) {
+    ctx.strokeStyle = "#f4fff0";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 9, cy - 9);
+    ctx.lineTo(cx + 9, cy + 9);
+    ctx.moveTo(cx + 9, cy - 9);
+    ctx.lineTo(cx - 9, cy + 9);
+    ctx.stroke();
+  }
+  if (m.hit > 0.25) {
+    ctx.strokeStyle = `rgba(255, 70, 48, ${Math.min(1, m.hit)})`;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    const ang = m.hitBrg - Math.PI / 2;
+    ctx.arc(cx, cy, Math.min(w, h) * 0.28, ang - 0.35, ang + 0.35);
+    ctx.stroke();
+  }
   if (locked) {
     ctx.strokeStyle = RED;
     ctx.fillStyle = RED;
@@ -662,6 +788,23 @@ function drawHud(ctx, w, h, m) {
   ctx.font = "600 16px 'Share Tech Mono', ui-monospace, monospace";
   if (m.stall) ctx.fillText("SLOW", cx, cy - 92);
   if (m.fuel < 900) ctx.fillText("BINGO", cx, cockpit ? 78 : h * 0.2);
+  if (m.incoming) {
+    ctx.fillStyle = RED;
+    ctx.strokeStyle = RED;
+    ctx.font = "700 28px 'Share Tech Mono', ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("MISSILE", cx, cockpit ? h * 0.16 : 118);
+    const ax = cx + Math.sin(m.incomingBrg) * Math.min(w, h) * 0.3;
+    const ay = cy - Math.cos(m.incomingBrg) * Math.min(w, h) * 0.22;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ax, ay, 11, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + Math.sin(m.incomingBrg) * 16, ay - Math.cos(m.incomingBrg) * 16);
+    ctx.stroke();
+  }
   if (m.burn) {
     ctx.fillStyle = GREEN;
     ctx.fillText("AB", cx, cockpit ? cy - 108 : cy + 92);
@@ -860,16 +1003,70 @@ function mountSkyVanguard(host2, hooks) {
       mesh
     });
   }
+  const boomCanvas = document.createElement("canvas");
+  boomCanvas.width = 128;
+  boomCanvas.height = 128;
+  const boomCtx = boomCanvas.getContext("2d");
+  if (boomCtx) {
+    const g = boomCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, "rgba(255,255,236,1)");
+    g.addColorStop(0.22, "rgba(255,176,48,0.95)");
+    g.addColorStop(0.55, "rgba(255,64,12,0.35)");
+    g.addColorStop(1, "rgba(20,0,0,0)");
+    boomCtx.fillStyle = g;
+    boomCtx.fillRect(0, 0, 128, 128);
+  }
+  const boomMap = new THREE4.CanvasTexture(boomCanvas);
+  boomMap.colorSpace = THREE4.SRGBColorSpace;
   const booms = [];
   for (let i = 0; i < 8; i++) {
-    const mesh = new THREE4.Mesh(
-      new THREE4.SphereGeometry(1, 10, 8),
-      new THREE4.MeshBasicMaterial({ color: 16746564, transparent: true, opacity: 0.9 })
+    const fire2 = new THREE4.Sprite(
+      new THREE4.SpriteMaterial({
+        map: boomMap,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE4.AdditiveBlending
+      })
     );
-    mesh.visible = false;
-    scene.add(mesh);
-    booms.push({ mesh, life: 0 });
+    fire2.visible = false;
+    scene.add(fire2);
+    const ring = new THREE4.Mesh(
+      new THREE4.RingGeometry(0.82, 1.05, 28),
+      new THREE4.MeshBasicMaterial({
+        color: 16765600,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE4.DoubleSide,
+        depthWrite: false,
+        blending: THREE4.AdditiveBlending
+      })
+    );
+    ring.visible = false;
+    scene.add(ring);
+    booms.push({ fire: fire2, ring, life: 0 });
   }
+  const trailCanvas = document.createElement("canvas");
+  trailCanvas.width = 64;
+  trailCanvas.height = 64;
+  const trailCtx = trailCanvas.getContext("2d");
+  if (trailCtx) {
+    const g = trailCtx.createRadialGradient(32, 32, 1, 32, 32, 30);
+    g.addColorStop(0, "rgba(255,255,255,0.75)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    trailCtx.fillStyle = g;
+    trailCtx.fillRect(0, 0, 64, 64);
+  }
+  const trailMap = new THREE4.CanvasTexture(trailCanvas);
+  const puffs = [];
+  for (let i = 0; i < 110; i++) {
+    const s = new THREE4.Sprite(
+      new THREE4.SpriteMaterial({ map: trailMap, transparent: true, depthWrite: false, opacity: 0.35 })
+    );
+    s.visible = false;
+    scene.add(s);
+    puffs.push({ s, life: 0, max: 1.4, grow: 8 });
+  }
+  let puffI = 0;
   const keys = /* @__PURE__ */ new Set();
   let qa = null;
   let steerOverride = null;
@@ -896,6 +1093,12 @@ function mountSkyVanguard(host2, hooks) {
   let gunCd = 0;
   let mslCd = 0;
   let lock = 0;
+  let lockSeal = 0;
+  let mark = 0;
+  let hitBrg = 0;
+  let warnT = 0;
+  let trailT = 0;
+  let banditTrail = 0;
   let shake = 0;
   let mfdT = 0;
   let uiT = 0;
@@ -987,11 +1190,16 @@ function mountSkyVanguard(host2, hooks) {
   function boomAt(p) {
     const b = booms.find((x) => x.life <= 0);
     if (!b) return;
-    b.life = 0.7;
-    b.mesh.visible = true;
-    b.mesh.position.copy(p);
-    b.mesh.scale.setScalar(4);
-    b.mesh.material.opacity = 0.85;
+    b.life = 0.85;
+    b.fire.visible = true;
+    b.fire.position.copy(p);
+    b.fire.scale.set(12, 12, 1);
+    b.fire.material.opacity = 1;
+    b.ring.visible = true;
+    b.ring.position.copy(p);
+    b.ring.scale.setScalar(6);
+    b.ring.material.opacity = 0.85;
+    tone(68, 0.24, "sawtooth", 0.06);
   }
   function fire(craft, friendly, homing, target, speed) {
     const any = shots.find((s) => !s.active);
@@ -1012,6 +1220,7 @@ function mountSkyVanguard(host2, hooks) {
     craft.alive = false;
     craft.hp = 0;
     craft.rig.root.visible = false;
+    for (const f of craft.rig.flames) f.visible = false;
     boomAt(craft.rig.root.position);
     if (craft.ai) {
       score2 += 300;
@@ -1020,6 +1229,8 @@ function mountSkyVanguard(host2, hooks) {
         score2 += 700;
         spawnWave();
       }
+      banner = "SPLASH";
+      bannerT = 1.25;
     }
   }
   function endSortie() {
@@ -1050,6 +1261,8 @@ function mountSkyVanguard(host2, hooks) {
     time = 0;
     hit = 0;
     lock = 0;
+    lockSeal = 0;
+    mark = 0;
     mode = "chase";
     for (const s of shots) {
       s.active = false;
@@ -1094,17 +1307,42 @@ function mountSkyVanguard(host2, hooks) {
     void audio.resume();
   }
   function blipGun() {
+    tone(180, 0.05, "square", 0.04);
+  }
+  function tone(freq, dur, type = "square", gain = 0.04) {
     if (!audio) return;
     const o = audio.createOscillator();
     const g = audio.createGain();
-    o.type = "square";
-    o.frequency.value = 180;
-    g.gain.setValueAtTime(0.04, audio.currentTime);
-    g.gain.exponentialRampToValueAtTime(1e-4, audio.currentTime + 0.05);
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(gain, audio.currentTime);
+    g.gain.exponentialRampToValueAtTime(1e-4, audio.currentTime + dur);
     o.connect(g);
     g.connect(audio.destination);
     o.start();
-    o.stop(audio.currentTime + 0.06);
+    o.stop(audio.currentTime + dur + 0.02);
+  }
+  function setBurn(craft, on) {
+    const flick = 0.72 + Math.random() * 0.5;
+    for (const f of craft.rig.flames) {
+      f.visible = on;
+      if (!on) continue;
+      const core = Boolean(f.userData.core);
+      f.scale.set(core ? 0.55 : 1, flick * (core ? 0.75 : 1), 1);
+    }
+    const hot = on ? 1 : 0.28;
+    for (const g of craft.rig.glows) g.color.setRGB(1, 0.2 + hot * 0.55, 0.05);
+  }
+  function puffAt(pos, grow) {
+    const p = puffs[puffI];
+    puffI = (puffI + 1) % puffs.length;
+    p.life = 1.35;
+    p.max = 1.35;
+    p.grow = grow;
+    p.s.visible = true;
+    p.s.position.copy(pos);
+    p.s.scale.set(grow, grow * 0.42, 1);
+    p.s.material.opacity = 0.36;
   }
   const onDown = (e) => {
     if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
@@ -1170,6 +1408,7 @@ function mountSkyVanguard(host2, hooks) {
     bannerT -= dt;
     if (bannerT <= 0) banner = "";
     hit = Math.max(0, hit - dt * 0.8);
+    mark = Math.max(0, mark - dt);
     shake *= Math.exp(-3.2 * dt);
     flareT = Math.max(0, flareT - dt);
     gunCd = Math.max(0, gunCd - dt);
@@ -1186,12 +1425,11 @@ function mountSkyVanguard(host2, hooks) {
     const burn = (held("ShiftLeft") || held("ShiftRight") || qa == null && touch2.burn) && fuel > 0;
     if (player.alive) {
       fly(player, rollIn, pitchIn, yawIn, burn, dt);
+      setBurn(player, burn);
       if (player.rig.stick) {
         player.rig.stick.rotation.z = -rollIn * 0.45;
         player.rig.stick.rotation.x = -pitchIn * 0.4;
       }
-      const glow = burn ? 1 : 0.45;
-      for (const g of player.rig.glows) g.color.setRGB(1, 0.25 + glow * 0.45, 0.08);
       if (player.hp <= 0) {
         player.alive = false;
         endSortie();
@@ -1203,26 +1441,43 @@ function mountSkyVanguard(host2, hooks) {
       player.rig.root.position.y -= 30 * dt;
     }
     const pPos = player.rig.root.position;
-    for (const b of bandits) {
-      if (!b.alive) continue;
-      _to.copy(pPos).sub(b.rig.root.position);
-      const dist = _to.length();
+    _up.set(0, 0, 1).transformDirection(player.rig.root.matrixWorld);
+    for (let i = 0; i < bandits.length; i++) {
+      const b = bandits[i];
+      if (!b.alive) {
+        for (const f of b.rig.flames) f.visible = false;
+        continue;
+      }
+      const dist = b.rig.root.position.distanceTo(pPos);
+      _to.copy(pPos).addScaledVector(_up, Math.min(480, dist * 0.3)).sub(b.rig.root.position);
       const desired = Math.atan2(_to.x, _to.z);
       const err = angNorm(desired - b.meshYaw);
-      const wantRoll = clamp(-err * 1.3, -1.05, 1.05);
-      const rollCmd = clamp(wantRoll - b.roll, -1, 1);
+      const behind = Math.abs(err) > 2.05;
+      let rollCmd = clamp(clamp(-err * 1.5, -1.15, 1.15) - b.roll, -1, 1);
+      rollCmd = clamp(rollCmd + Math.sin(time * 1.7 + i * 1.3) * 0.2, -1, 1);
       const altErr = pPos.y - b.rig.root.position.y;
-      const pitchCmd = clamp(-altErr / 700 - b.pitch, -1, 1);
-      fly(b, rollCmd, pitchCmd, 0, dist > 1800, dt);
+      let pitchCmd = clamp(-altErr / 620 - b.pitch, -1, 1);
+      let burning = dist > 1500 || b.speed < 210;
+      if (behind && dist < 900) {
+        rollCmd = i % 2 === 0 ? 1 : -1;
+        pitchCmd = -0.3;
+        burning = true;
+      } else if (dist < 200) {
+        pitchCmd = -0.9;
+        burning = true;
+      }
+      fly(b, rollCmd, pitchCmd, 0, burning, dt);
+      setBurn(b, burning);
       b.shoot -= dt;
       b.missile -= dt;
-      if (b.shoot <= 0 && dist < 1100 && Math.abs(err) < 0.35) {
+      if (b.shoot <= 0 && dist < 1e3 && Math.abs(err) < 0.28) {
         fire(b, false, false, -1, 820);
-        b.shoot = 0.18;
+        b.shoot = 0.16;
       }
-      if (b.missile <= 0 && dist < 2800 && Math.abs(err) < 0.5 && flareT <= 0) {
+      if (b.missile <= 0 && dist > 400 && dist < 2600 && Math.abs(err) < 0.42 && flareT <= 0) {
         fire(b, false, true, -1, 430);
-        b.missile = 9;
+        b.missile = 8;
+        tone(520, 0.08, "square", 0.03);
       }
       if (b.hp <= 0) kill(b);
     }
@@ -1237,9 +1492,15 @@ function mountSkyVanguard(host2, hooks) {
     const missileEdge = edge("KeyF") || touch2.edges.missile !== seen.missile;
     seen.missile = touch2.edges.missile;
     if (missileEdge && player.alive && mslCd <= 0 && msl > 0 && bandits[lock]?.alive) {
-      fire(player, true, true, lock, 460);
-      msl -= 1;
-      mslCd = 0.45;
+      if (lockSeal < 0.72) {
+        banner = "NO LOCK";
+        bannerT = 0.55;
+      } else {
+        fire(player, true, true, lock, 460);
+        msl -= 1;
+        mslCd = 0.45;
+        tone(110, 0.18, "sawtooth", 0.045);
+      }
     }
     const flareEdge = edge("KeyV") || touch2.edges.flare !== seen.flare;
     seen.flare = touch2.edges.flare;
@@ -1291,6 +1552,7 @@ function mountSkyVanguard(host2, hooks) {
           if (!b.alive) continue;
           if (b.rig.root.position.distanceTo(s.pos) < (s.homing ? 16 : 10)) {
             b.hp -= s.homing ? 56 : 9;
+            mark = 0.16;
             gone = true;
             boomAt(s.pos);
             break;
@@ -1299,6 +1561,8 @@ function mountSkyVanguard(host2, hooks) {
       } else if (player.alive && pPos.distanceTo(s.pos) < (s.homing ? 14 : 8)) {
         player.hp -= s.homing ? 22 : 7;
         hit = 1;
+        _cam.copy(s.pos).sub(pPos);
+        hitBrg = angNorm(Math.atan2(_cam.x, _cam.z) - player.meshYaw);
         shake = 0.8;
         gone = true;
         boomAt(s.pos);
@@ -1315,10 +1579,43 @@ function mountSkyVanguard(host2, hooks) {
     for (const b of booms) {
       if (b.life <= 0) continue;
       b.life -= dt;
-      const k = 1 - b.life / 0.7;
-      b.mesh.scale.setScalar(4 + k * 18);
-      b.mesh.material.opacity = Math.max(0, 0.85 * (1 - k));
-      if (b.life <= 0) b.mesh.visible = false;
+      const k = 1 - b.life / 0.85;
+      const s = 10 + k * 42;
+      b.fire.scale.set(s, s, 1);
+      b.fire.material.opacity = Math.max(0, 1 - k);
+      b.ring.scale.setScalar(5 + k * 30);
+      b.ring.lookAt(camera.position);
+      b.ring.material.opacity = Math.max(0, 0.8 * (1 - k));
+      if (b.life <= 0) {
+        b.fire.visible = false;
+        b.ring.visible = false;
+      }
+    }
+    for (const p of puffs) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      const k = Math.max(0, p.life / p.max);
+      const size = p.grow + (1 - k) * p.grow * 1.8;
+      p.s.scale.set(size, size * 0.4, 1);
+      p.s.material.opacity = 0.34 * k;
+      if (p.life <= 0) p.s.visible = false;
+    }
+    trailT -= dt;
+    if (trailT <= 0 && player.alive && player.speed > 190) {
+      trailT = 0.048;
+      for (const side of [-1, 1]) {
+        _look.set(6.8 * side, 0.05, -0.4).applyMatrix4(player.rig.root.matrixWorld);
+        puffAt(_look, Math.abs(player.roll) > 0.85 ? 16 : 8);
+      }
+    }
+    banditTrail -= dt;
+    if (banditTrail <= 0) {
+      banditTrail = 0.11;
+      for (const b of bandits) {
+        if (!b.alive || b.speed < 240) continue;
+        _look.set(0.2, 0.3, -9.1).applyMatrix4(b.rig.root.matrixWorld);
+        puffAt(_look, 10);
+      }
     }
     if (mode === "cockpit") {
       camera.up.set(0, 1, 0);
@@ -1343,6 +1640,11 @@ function mountSkyVanguard(host2, hooks) {
     if (shake > 0.02) {
       camera.position.x += (Math.random() - 0.5) * shake * 0.7;
       camera.position.y += (Math.random() - 0.5) * shake * 0.45;
+    }
+    const wantFov = mode === "cockpit" ? 74 : 58 + Math.min(12, player.speed / 48) + (burn ? 5 : 0);
+    if (Math.abs(camera.fov - wantFov) > 0.04) {
+      camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 3.5);
+      camera.updateProjectionMatrix();
     }
     if (audio && engineGain && engineOsc) {
       engineOsc.frequency.value = 64 + player.speed / 400 * 90 + (burn ? 36 : 0);
@@ -1369,6 +1671,53 @@ function mountSkyVanguard(host2, hooks) {
         ahead: _ndc.z < 1 && bearing > -1.2 && bearing < 1.2,
         locked: i === lock
       });
+    }
+    let incoming = false;
+    let incomingBrg = 0;
+    let nearest = 1e9;
+    if (player.alive && flareT <= 0) {
+      for (const s of shots) {
+        if (!s.active || s.friendly || !s.homing) continue;
+        const d = pPos.distanceTo(s.pos);
+        if (d < nearest) {
+          nearest = d;
+          incoming = true;
+          _to.copy(s.pos).sub(pPos);
+          incomingBrg = angNorm(Math.atan2(_to.x, _to.z) - player.meshYaw);
+        }
+      }
+    }
+    if (incoming) {
+      warnT -= dt;
+      if (warnT <= 0) {
+        tone(980, 0.06, "square", 0.035);
+        warnT = 0.32;
+      }
+    } else {
+      warnT = 0;
+    }
+    let piperOn = false;
+    let piperX = 0;
+    let piperY = 0;
+    const lockedCraft = bandits[lock];
+    if (lockedCraft?.alive && player.alive) {
+      const rel = _cam.copy(lockedCraft.rig.root.position).sub(pPos);
+      const dist = rel.length();
+      const bearing = angNorm(Math.atan2(rel.x, rel.z) - player.meshYaw);
+      if (Math.abs(bearing) < 0.5 && dist < 5200 && dist > 30) lockSeal = Math.min(1, lockSeal + dt * 0.9);
+      else lockSeal = Math.max(0, lockSeal - dt * 1.3);
+      orient(lockedCraft);
+      const leadT = clamp(dist / 1050, 0.05, 2.2);
+      _look.copy(lockedCraft.rig.root.position).addScaledVector(_fwd, lockedCraft.speed * leadT);
+      _ndc.copy(_look).project(camera);
+      if (_ndc.z < 1) {
+        piperOn = true;
+        piperX = (_ndc.x * 0.5 + 0.5) * w;
+        piperY = (-_ndc.y * 0.5 + 0.5) * h;
+      }
+      orient(player);
+    } else {
+      lockSeal = Math.max(0, lockSeal - dt * 1.6);
     }
     const model = {
       mode,
@@ -1399,7 +1748,15 @@ function mountSkyVanguard(host2, hooks) {
       blips,
       meshYaw: player.meshYaw,
       px: pPos.x,
-      pz: pPos.z
+      pz: pPos.z,
+      piperX,
+      piperY,
+      piperOn,
+      incoming,
+      incomingBrg,
+      mark,
+      lockSeal,
+      hitBrg
     };
     mfdT += dt;
     if (mode === "cockpit" && mfdT > 0.08 && player.rig.screens.length) {
@@ -1418,6 +1775,10 @@ function mountSkyVanguard(host2, hooks) {
     world.sun.target.position.copy(p);
     world.sun.target.updateMatrixWorld();
     if (world.sky) world.sky.position.copy(camera.position);
+    world.sunDisk.position.copy(camera.position);
+    world.sunDisk.position.x -= 2600;
+    world.sunDisk.position.y += 1500;
+    world.sunDisk.position.z += 800;
   }
   const prevEdge = /* @__PURE__ */ new Set();
   function edge(code) {
