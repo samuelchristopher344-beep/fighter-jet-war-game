@@ -1,5 +1,5 @@
 // src/game/sim.ts
-import * as THREE4 from "three";
+import * as THREE5 from "three";
 
 // src/game/jet.ts
 import * as THREE from "three";
@@ -331,13 +331,28 @@ function fbm(x, z) {
   }
   return sum / norm;
 }
-function terrainHeight(x, z) {
+function rawHeight(x, z) {
   const riverX = Math.sin(z * 35e-5) * 1600;
   const river = Math.exp(-(((x - riverX) / 340) ** 2));
   const ridge = fbm(x, z);
   let h = ridge * 980 + fbm(x + 4e3, z - 2e3) * 220 - river * 820;
   if (h < 40) h = 40 - (40 - h) * 0.05;
   return h;
+}
+var FIELD_X = 0;
+var FIELD_Z = 220;
+var PAD_Y = rawHeight(FIELD_X, FIELD_Z);
+function fieldPad() {
+  return PAD_Y;
+}
+function terrainHeight(x, z) {
+  const h = rawHeight(x, z);
+  const dx = (x - FIELD_X) / 170;
+  const dz = (z - FIELD_Z) / 640;
+  const d = Math.sqrt(dx * dx + dz * dz);
+  if (d >= 1) return h;
+  const t = d * d * (3 - 2 * d);
+  return PAD_Y * (1 - t) + h * t;
 }
 function createWorld(scene, look) {
   scene.background = new THREE2.Color(9357551);
@@ -496,6 +511,128 @@ function loadLook() {
     ground: prep("/textures/ground.jpg", 32, 32, THREE3.RepeatWrapping),
     sky: prep("/textures/sky.jpg", 1, 1, THREE3.ClampToEdgeWrapping)
   };
+}
+
+// src/game/field.ts
+import * as THREE4 from "three";
+function buildAirfield(scene, deck) {
+  const g = new THREE4.Group();
+  const asphalt = new THREE4.MeshStandardMaterial({ color: 2896182, roughness: 0.94 });
+  const paint = new THREE4.MeshBasicMaterial({ color: 16054264 });
+  const runway = new THREE4.Mesh(new THREE4.BoxGeometry(44, 0.3, 920), asphalt);
+  runway.position.set(0, deck + 0.12, 250);
+  g.add(runway);
+  for (let i = 0; i < 26; i++) {
+    const dash = new THREE4.Mesh(new THREE4.BoxGeometry(0.8, 0.04, 16), paint);
+    dash.position.set(0, deck + 0.3, 40 + i * 30);
+    g.add(dash);
+  }
+  for (const side of [-1, 1]) {
+    const edge = new THREE4.Mesh(new THREE4.BoxGeometry(0.45, 0.04, 900), paint);
+    edge.position.set(19 * side, deck + 0.3, 250);
+    g.add(edge);
+  }
+  const threshold = new THREE4.Mesh(new THREE4.BoxGeometry(30, 0.04, 2), paint);
+  threshold.position.set(0, deck + 0.3, 48);
+  g.add(threshold);
+  const lampMat = new THREE4.MeshBasicMaterial({ color: 16769704 });
+  for (let i = 0; i < 16; i++) {
+    for (const side of [-1, 1]) {
+      const lamp = new THREE4.Mesh(new THREE4.SphereGeometry(0.28, 8, 6), lampMat);
+      lamp.position.set(22 * side, deck + 0.55, 30 + i * 52);
+      g.add(lamp);
+    }
+  }
+  const apron = new THREE4.Mesh(
+    new THREE4.BoxGeometry(28, 0.26, 36),
+    new THREE4.MeshStandardMaterial({ color: 3949128, roughness: 0.96 })
+  );
+  apron.position.set(-22, deck + 0.1, 70);
+  g.add(apron);
+  const wall = new THREE4.MeshStandardMaterial({ color: 13351066, roughness: 0.82 });
+  const timber = new THREE4.MeshStandardMaterial({ color: 6961954, roughness: 0.7 });
+  const innX = -46;
+  const innZ = 58;
+  const back = new THREE4.Mesh(new THREE4.BoxGeometry(0.6, 5.5, 14), wall);
+  back.position.set(innX - 7, deck + 2.8, innZ);
+  g.add(back);
+  for (const side of [-1, 1]) {
+    const sideWall = new THREE4.Mesh(new THREE4.BoxGeometry(14, 5.5, 0.5), wall);
+    sideWall.position.set(innX, deck + 2.8, innZ + side * 7);
+    g.add(sideWall);
+  }
+  const roof = new THREE4.Mesh(new THREE4.ConeGeometry(11, 3.4, 4), timber);
+  roof.rotation.y = Math.PI / 4;
+  roof.position.set(innX, deck + 6.6, innZ);
+  g.add(roof);
+  const floor = new THREE4.Mesh(
+    new THREE4.BoxGeometry(14, 0.2, 14),
+    new THREE4.MeshStandardMaterial({ color: 4863012, roughness: 0.9 })
+  );
+  floor.position.set(innX, deck + 0.12, innZ);
+  g.add(floor);
+  for (const side of [-1, 1]) {
+    const post = new THREE4.Mesh(new THREE4.BoxGeometry(0.35, 3.1, 0.35), timber);
+    post.position.set(innX + 7, deck + 1.55, innZ + side * 1.15);
+    g.add(post);
+  }
+  const lintel = new THREE4.Mesh(new THREE4.BoxGeometry(0.35, 0.35, 2.6), timber);
+  lintel.position.set(innX + 7, deck + 3.15, innZ);
+  g.add(lintel);
+  const windowMat = new THREE4.MeshBasicMaterial({ color: 16762218 });
+  for (const side of [-1, 1]) {
+    const win = new THREE4.Mesh(new THREE4.PlaneGeometry(1.8, 1.3), windowMat);
+    win.position.set(innX + 7.05, deck + 4.15, innZ + side * 3.4);
+    win.rotation.y = Math.PI / 2;
+    g.add(win);
+  }
+  const signCanvas = document.createElement("canvas");
+  signCanvas.width = 256;
+  signCanvas.height = 96;
+  const sg = signCanvas.getContext("2d");
+  if (sg) {
+    sg.fillStyle = "#1b140e";
+    sg.fillRect(0, 0, 256, 96);
+    sg.fillStyle = "#f0d7a2";
+    sg.font = "700 54px sans-serif";
+    sg.textAlign = "center";
+    sg.textBaseline = "middle";
+    sg.fillText("INN", 128, 50);
+  }
+  const signTex = new THREE4.CanvasTexture(signCanvas);
+  signTex.colorSpace = THREE4.SRGBColorSpace;
+  const sign = new THREE4.Mesh(
+    new THREE4.PlaneGeometry(3.2, 1.15),
+    new THREE4.MeshBasicMaterial({ map: signTex })
+  );
+  sign.position.set(innX + 7.1, deck + 5.1, innZ);
+  sign.rotation.y = Math.PI / 2;
+  g.add(sign);
+  scene.add(g);
+  const cloth = new THREE4.MeshStandardMaterial({ color: 1712944, roughness: 0.55 });
+  const skinMat = new THREE4.MeshStandardMaterial({ color: 12880742, roughness: 0.5 });
+  const pilot = new THREE4.Group();
+  const torso = new THREE4.Mesh(new THREE4.CapsuleGeometry(0.28, 0.62, 4, 8), cloth);
+  torso.position.y = 1.2;
+  pilot.add(torso);
+  const head = new THREE4.Mesh(new THREE4.SphereGeometry(0.18, 12, 10), skinMat);
+  head.position.y = 1.82;
+  pilot.add(head);
+  const helmet = new THREE4.Mesh(
+    new THREE4.SphereGeometry(0.22, 12, 10, 0, Math.PI * 2, 0, Math.PI / 1.7),
+    new THREE4.MeshStandardMaterial({ color: 9429098, roughness: 0.4, metalness: 0.2 })
+  );
+  helmet.position.y = 1.9;
+  pilot.add(helmet);
+  const legGeo = new THREE4.CapsuleGeometry(0.09, 0.42, 3, 6);
+  const legL = new THREE4.Mesh(legGeo, cloth);
+  const legR = new THREE4.Mesh(legGeo, cloth);
+  legL.position.set(-0.12, 0.48, 0);
+  legR.position.set(0.12, 0.48, 0);
+  pilot.add(legL, legR);
+  pilot.position.set(innX + 1.5, deck, innZ);
+  scene.add(pilot);
+  return { pilot, legs: [legL, legR], deck };
 }
 
 // src/game/hud.ts
@@ -943,12 +1080,12 @@ function paintEngines(screen, m) {
 // src/game/sim.ts
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 var BEST_KEY = "sky-vanguard-best";
-var _fwd = new THREE4.Vector3();
-var _up = new THREE4.Vector3();
-var _to = new THREE4.Vector3();
-var _cam = new THREE4.Vector3();
-var _look = new THREE4.Vector3();
-var _ndc = new THREE4.Vector3();
+var _fwd = new THREE5.Vector3();
+var _up = new THREE5.Vector3();
+var _to = new THREE5.Vector3();
+var _cam = new THREE5.Vector3();
+var _look = new THREE5.Vector3();
+var _ndc = new THREE5.Vector3();
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
@@ -956,13 +1093,13 @@ function angNorm(a) {
   return Math.atan2(Math.sin(a), Math.cos(a));
 }
 function mountSkyVanguard(host2, hooks) {
-  const renderer = new THREE4.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  const renderer = new THREE5.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.outputColorSpace = THREE4.SRGBColorSpace;
-  renderer.toneMapping = THREE4.ACESFilmicToneMapping;
+  renderer.outputColorSpace = THREE5.SRGBColorSpace;
+  renderer.toneMapping = THREE5.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE4.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE5.PCFSoftShadowMap;
   renderer.setClearColor(9357551, 1);
   host2.appendChild(renderer.domElement);
   const hudCanvas = document.createElement("canvas");
@@ -971,31 +1108,34 @@ function mountSkyVanguard(host2, hooks) {
   const hud2d = hudCanvas.getContext("2d");
   if (!hud2d) throw new Error("hud");
   const hudCtx = hud2d;
-  const scene = new THREE4.Scene();
+  const scene = new THREE5.Scene();
   const look = loadLook();
   const world = createWorld(scene, look);
   useSkin(look.panel);
-  const pmrem = new THREE4.PMREMGenerator(renderer);
+  const pmrem = new THREE5.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   pmrem.dispose();
-  const camera = new THREE4.PerspectiveCamera(62, 1, 0.08, 28e3);
+  const camera = new THREE5.PerspectiveCamera(62, 1, 0.08, 28e3);
   scene.add(camera);
   const player = makeCraft("own", "203", false);
   scene.add(player.rig.root);
-  player.rig.root.position.set(0, 3400, 0);
+  const field = buildAirfield(scene, fieldPad());
+  let walkYaw = Math.PI / 2;
+  let walkCycle = 0;
+  player.rig.root.position.set(0, field.deck + 1.25, 78);
   const bandits = [];
   const shots = [];
   for (let i = 0; i < 48; i++) {
-    const mesh = new THREE4.Mesh(
-      new THREE4.BoxGeometry(0.12, 0.12, 2.2),
-      new THREE4.MeshBasicMaterial({ color: i < 36 ? 16769162 : 16742972 })
+    const mesh = new THREE5.Mesh(
+      new THREE5.BoxGeometry(0.12, 0.12, 2.2),
+      new THREE5.MeshBasicMaterial({ color: i < 36 ? 16769162 : 16742972 })
     );
     mesh.visible = false;
     scene.add(mesh);
     shots.push({
       active: false,
-      pos: new THREE4.Vector3(),
-      vel: new THREE4.Vector3(),
+      pos: new THREE5.Vector3(),
+      vel: new THREE5.Vector3(),
       life: 0,
       friendly: i < 36,
       homing: false,
@@ -1016,29 +1156,29 @@ function mountSkyVanguard(host2, hooks) {
     boomCtx.fillStyle = g;
     boomCtx.fillRect(0, 0, 128, 128);
   }
-  const boomMap = new THREE4.CanvasTexture(boomCanvas);
-  boomMap.colorSpace = THREE4.SRGBColorSpace;
+  const boomMap = new THREE5.CanvasTexture(boomCanvas);
+  boomMap.colorSpace = THREE5.SRGBColorSpace;
   const booms = [];
   for (let i = 0; i < 8; i++) {
-    const fire2 = new THREE4.Sprite(
-      new THREE4.SpriteMaterial({
+    const fire2 = new THREE5.Sprite(
+      new THREE5.SpriteMaterial({
         map: boomMap,
         transparent: true,
         depthWrite: false,
-        blending: THREE4.AdditiveBlending
+        blending: THREE5.AdditiveBlending
       })
     );
     fire2.visible = false;
     scene.add(fire2);
-    const ring = new THREE4.Mesh(
-      new THREE4.RingGeometry(0.82, 1.05, 28),
-      new THREE4.MeshBasicMaterial({
+    const ring = new THREE5.Mesh(
+      new THREE5.RingGeometry(0.82, 1.05, 28),
+      new THREE5.MeshBasicMaterial({
         color: 16765600,
         transparent: true,
         opacity: 0.8,
-        side: THREE4.DoubleSide,
+        side: THREE5.DoubleSide,
         depthWrite: false,
-        blending: THREE4.AdditiveBlending
+        blending: THREE5.AdditiveBlending
       })
     );
     ring.visible = false;
@@ -1056,11 +1196,11 @@ function mountSkyVanguard(host2, hooks) {
     trailCtx.fillStyle = g;
     trailCtx.fillRect(0, 0, 64, 64);
   }
-  const trailMap = new THREE4.CanvasTexture(trailCanvas);
+  const trailMap = new THREE5.CanvasTexture(trailCanvas);
   const puffs = [];
   for (let i = 0; i < 110; i++) {
-    const s = new THREE4.Sprite(
-      new THREE4.SpriteMaterial({ map: trailMap, transparent: true, depthWrite: false, opacity: 0.35 })
+    const s = new THREE5.Sprite(
+      new THREE5.SpriteMaterial({ map: trailMap, transparent: true, depthWrite: false, opacity: 0.35 })
     );
     s.visible = false;
     scene.add(s);
@@ -1072,7 +1212,8 @@ function mountSkyVanguard(host2, hooks) {
   let steerOverride = null;
   let seen = { missile: 0, flare: 0, cam: 0, lock: 0 };
   let mode = "chase";
-  let phase = "brief";
+  let phase = "walk";
+  let hint2 = "Walk out of the inn and into the jet.";
   let score2 = 0;
   let best = 0;
   try {
@@ -1121,7 +1262,8 @@ function mountSkyVanguard(host2, hooks) {
       wave,
       hp: Math.max(0, player.hp),
       cam: camLabels[mode],
-      ready: true
+      ready: true,
+      hint: hint2
     });
   }
   function orient(craft) {
@@ -1147,14 +1289,16 @@ function mountSkyVanguard(host2, hooks) {
     craft.speed = clamp(craft.speed, 60, 520);
     craft.rig.root.position.addScaledVector(_fwd, craft.speed * dt);
     const p = craft.rig.root.position;
-    const floor = Math.max(48, terrainHeight(p.x, p.z)) + 14;
+    const ground = Math.max(48, terrainHeight(p.x, p.z));
+    const alt = p.y - ground;
+    const floor = ground + (alt < 30 ? 2.4 : 10);
     if (p.y < floor) {
       p.y = floor;
-      craft.pitch = -0.2;
-      if (craft.speed > 160) {
-        craft.hp -= 50 * dt;
-        craft.speed *= 0.98;
-        shake = Math.min(1, shake + 0.4);
+      craft.pitch = -0.12;
+      if (craft.speed > 200 && alt < 6) {
+        craft.hp -= 40 * dt;
+        craft.speed *= 0.99;
+        shake = Math.min(1, shake + 0.3);
       }
     }
     if (Math.abs(p.x) > 8200) p.x = Math.sign(p.x) * 8200;
@@ -1176,7 +1320,11 @@ function mountSkyVanguard(host2, hooks) {
       if (!b.alive) continue;
       const ang = i / n * Math.PI * 2 + 0.4;
       const dist = 1600 + i * 380;
-      b.rig.root.position.set(origin.x + Math.sin(ang) * dist, origin.y + (i - 1) * 140, origin.z + Math.cos(ang) * dist);
+      b.rig.root.position.set(
+        origin.x + Math.sin(ang) * dist,
+        origin.y + 520 + (i - 1) * 120,
+        origin.z + Math.cos(ang) * dist
+      );
       b.meshYaw = Math.atan2(origin.x - b.rig.root.position.x, origin.z - b.rig.root.position.z);
       b.pitch = 0;
       b.roll = 0;
@@ -1273,16 +1421,9 @@ function mountSkyVanguard(host2, hooks) {
     publish(true);
   }
   function start2() {
-    if (phase === "fly") return;
+    if (phase === "fly" || phase === "walk" || phase === "ground") return;
     ensureAudio();
-    if (phase === "down") resetSortie();
-    else {
-      player.speed = 230;
-      player.alive = true;
-      phase = "fly";
-      spawnWave();
-      publish(true);
-    }
+    resetToField();
   }
   hooks.api.current = { start: start2, restart: start2 };
   function ensureAudio() {
@@ -1380,7 +1521,7 @@ function mountSkyVanguard(host2, hooks) {
   const ro = new ResizeObserver(resize);
   ro.observe(host2);
   resize();
-  const timer = new THREE4.Timer();
+  const timer = new THREE5.Timer();
   timer.connect(document);
   let lastMfd = 0;
   function frame() {
@@ -1389,7 +1530,7 @@ function mountSkyVanguard(host2, hooks) {
     const dt = Math.min(timer.getDelta(), 0.05);
     const touch2 = hooks.readTouch();
     if (hooks.takePending()) start2();
-    if (phase !== "fly") {
+    if (phase === "brief" || phase === "down") {
       const t = timer.getElapsed();
       orient(player);
       const p = player.rig.root.position;
@@ -1404,16 +1545,6 @@ function mountSkyVanguard(host2, hooks) {
       hudCtx.clearRect(0, 0, host2.clientWidth, host2.clientHeight);
       return;
     }
-    time += dt;
-    bannerT -= dt;
-    if (bannerT <= 0) banner = "";
-    hit = Math.max(0, hit - dt * 0.8);
-    mark = Math.max(0, mark - dt);
-    shake *= Math.exp(-3.2 * dt);
-    flareT = Math.max(0, flareT - dt);
-    gunCd = Math.max(0, gunCd - dt);
-    mslCd = Math.max(0, mslCd - dt);
-    fuel = Math.max(0, fuel - ((held("ShiftLeft") || held("ShiftRight") || touch2.burn) && fuel > 0 ? 16 : 5.5) * dt);
     let rollIn = (held("KeyA") || held("ArrowLeft") ? 1 : 0) + (held("KeyD") || held("ArrowRight") ? -1 : 0);
     let pitchIn = (held("KeyW") || held("ArrowUp") ? 1 : 0) + (held("KeyS") || held("ArrowDown") ? -1 : 0);
     const yawIn = (held("KeyQ") ? 1 : 0) + (held("KeyE") ? -1 : 0);
@@ -1423,6 +1554,23 @@ function mountSkyVanguard(host2, hooks) {
     }
     if (steerOverride != null) rollIn = clamp(steerOverride, -1, 1);
     const burn = (held("ShiftLeft") || held("ShiftRight") || qa == null && touch2.burn) && fuel > 0;
+    if (phase === "walk") {
+      stepWalk(dt, rollIn, pitchIn);
+      return;
+    }
+    if (phase === "ground") {
+      if (!stepGround(dt, rollIn, pitchIn, burn)) return;
+    }
+    time += dt;
+    bannerT -= dt;
+    if (bannerT <= 0) banner = "";
+    hit = Math.max(0, hit - dt * 0.8);
+    mark = Math.max(0, mark - dt);
+    shake *= Math.exp(-3.2 * dt);
+    flareT = Math.max(0, flareT - dt);
+    gunCd = Math.max(0, gunCd - dt);
+    mslCd = Math.max(0, mslCd - dt);
+    fuel = Math.max(0, fuel - (burn && fuel > 0 ? 16 : 5.5) * dt);
     if (player.alive) {
       fly(player, rollIn, pitchIn, yawIn, burn, dt);
       setBurn(player, burn);
@@ -1788,8 +1936,139 @@ function mountSkyVanguard(host2, hooks) {
     else prevEdge.delete(code);
     return down && !was;
   }
+  function stepWalk(dt, rollIn, pitchIn) {
+    walkYaw += -rollIn * 2.2 * dt;
+    const spd = clamp(pitchIn, -1, 1) * 4.6;
+    const pilot = field.pilot;
+    pilot.position.x += Math.sin(walkYaw) * spd * dt;
+    pilot.position.z += Math.cos(walkYaw) * spd * dt;
+    pilot.position.x = clamp(pilot.position.x, -62, 14);
+    pilot.position.z = clamp(pilot.position.z, 24, 150);
+    pilot.position.y = field.deck;
+    pilot.rotation.y = walkYaw;
+    const moving = Math.abs(spd) > 0.15;
+    walkCycle += dt * (moving ? 9 : 0);
+    field.legs[0].rotation.x = moving ? Math.sin(walkCycle) * 0.7 : 0;
+    field.legs[1].rotation.x = moving ? Math.sin(walkCycle + Math.PI) * 0.7 : 0;
+    const dx = pilot.position.x - player.rig.root.position.x;
+    const dz = pilot.position.z - player.rig.root.position.z;
+    const near = dx * dx + dz * dz < 70;
+    hint2 = near ? "Walk into the jet." : "Walk out of the inn and into the jet.";
+    if (near) board();
+    const fx = Math.sin(walkYaw);
+    const fz = Math.cos(walkYaw);
+    _cam.set(pilot.position.x - fx * 5.2, field.deck + 2.6, pilot.position.z - fz * 5.2);
+    camera.position.lerp(_cam, 1 - Math.exp(-4 * Math.max(dt, 0.016)));
+    camera.up.set(0, 1, 0);
+    camera.lookAt(pilot.position.x, field.deck + 1.55, pilot.position.z);
+    dress();
+    renderer.render(scene, camera);
+    hudCtx.clearRect(0, 0, host2.clientWidth, host2.clientHeight);
+    publish();
+  }
+  function board() {
+    phase = "ground";
+    field.pilot.visible = false;
+    player.speed = 0;
+    player.pitch = 0;
+    player.roll = 0;
+    player.meshYaw = 0;
+    player.alive = true;
+    player.hp = 100;
+    orient(player);
+    setBurn(player, false);
+    hint2 = "Hold Shift or BURN to roll. A D steer. Pull W to rotate.";
+    ensureAudio();
+    publish(true);
+  }
+  function stepGround(dt, rollIn, pitchIn, burn) {
+    const power = burn ? 1 : pitchIn > 0.12 ? 0.58 : 0;
+    const brake = pitchIn < -0.25;
+    const want = brake ? 0 : power * (burn ? 150 : 98);
+    player.speed += (want - player.speed) * dt * (brake ? 2.5 : 0.95);
+    player.speed = clamp(player.speed, 0, 190);
+    if (player.speed > 4) player.meshYaw += -rollIn * 0.9 * dt;
+    player.roll = 0;
+    const fast = player.speed > 86;
+    if (fast && pitchIn > 0.42 && !brake) {
+      player.pitch = -0.34;
+      const p2 = player.rig.root.position;
+      p2.y = terrainHeight(p2.x, p2.z) + 3.4;
+      phase = "fly";
+      hint2 = "";
+      banner = "AIRBORNE";
+      bannerT = 1.8;
+      spawnWave();
+      publish(true);
+      return true;
+    }
+    player.pitch = 0;
+    orient(player);
+    player.rig.root.position.addScaledVector(_fwd, player.speed * dt);
+    const p = player.rig.root.position;
+    p.y = terrainHeight(p.x, p.z) + 1.25;
+    setBurn(player, power > 0.4);
+    const kt = Math.round(player.speed * 1.94);
+    hint2 = fast ? `ROTATE  ${kt} KT \xB7 hold W` : `ROLL  ${kt} KT \xB7 Shift throttle \xB7 A D steer`;
+    orient(player);
+    _cam.copy(p).addScaledVector(_fwd, -20);
+    _cam.y += 4.5;
+    camera.up.set(0, 1, 0);
+    camera.position.lerp(_cam, 1 - Math.exp(-3.2 * Math.max(dt, 0.016)));
+    _look.copy(p).addScaledVector(_fwd, 20);
+    _look.y += 1.2;
+    camera.lookAt(_look);
+    dress();
+    renderer.render(scene, camera);
+    hudCtx.clearRect(0, 0, host2.clientWidth, host2.clientHeight);
+    publish();
+    return false;
+  }
+  function resetToField() {
+    player.speed = 0;
+    player.pitch = 0;
+    player.roll = 0;
+    player.meshYaw = 0;
+    player.alive = true;
+    player.hp = 100;
+    player.rig.root.visible = true;
+    player.rig.root.position.set(0, field.deck + 1.25, 78);
+    orient(player);
+    setBurn(player, false);
+    field.pilot.visible = true;
+    field.pilot.position.set(-44.5, field.deck, 58);
+    walkYaw = Math.PI / 2;
+    walkCycle = 0;
+    field.pilot.rotation.y = walkYaw;
+    field.legs[0].rotation.x = 0;
+    field.legs[1].rotation.x = 0;
+    fuel = 6800;
+    gun = 560;
+    msl = 6;
+    flares = 30;
+    score2 = 0;
+    wave = 1;
+    time = 0;
+    hit = 0;
+    lock = 0;
+    lockSeal = 0;
+    mark = 0;
+    mode = "chase";
+    banner = "";
+    for (const s of shots) {
+      s.active = false;
+      s.mesh.visible = false;
+    }
+    for (const b of bandits) {
+      b.alive = false;
+      b.rig.root.visible = false;
+    }
+    phase = "walk";
+    hint2 = "Walk out of the inn and into the jet.";
+    publish(true);
+  }
+  resetToField();
   renderer.setAnimationLoop(frame);
-  publish(true);
   return () => {
     disposed = true;
     renderer.setAnimationLoop(null);
@@ -1827,7 +2106,8 @@ var score = document.getElementById("score");
 var start = document.getElementById("start");
 var stick = document.getElementById("stick");
 var touchBar = document.getElementById("touch");
-if (!host || !panel || !title || !score || !start || !stick || !touchBar) {
+var hint = document.getElementById("hint");
+if (!host || !panel || !title || !score || !start || !stick || !touchBar || !hint) {
   throw new Error("shell");
 }
 var touch = {
@@ -1842,10 +2122,13 @@ var pending = false;
 mountSkyVanguard(host, {
   readTouch: () => touch,
   onChange: (ui) => {
-    const flying = ui.phase === "fly";
-    panel.hidden = flying;
-    touchBar.hidden = !flying;
-    title.textContent = ui.phase === "down" ? "Jet down" : "Clear for takeoff";
+    const menu = ui.phase === "brief" || ui.phase === "down";
+    const handsOn = ui.phase === "walk" || ui.phase === "ground" || ui.phase === "fly";
+    panel.hidden = !menu;
+    touchBar.hidden = !handsOn;
+    hint.hidden = ui.phase !== "walk" && ui.phase !== "ground";
+    hint.textContent = ui.hint;
+    title.textContent = ui.phase === "down" ? "Jet down" : "Walk to the jet";
     score.textContent = ui.phase === "down" ? `BEST ${ui.best.toLocaleString("en-US")} \xB7 SCORE ${ui.score.toLocaleString("en-US")}` : `BEST ${ui.best.toLocaleString("en-US")}`;
   },
   api,
