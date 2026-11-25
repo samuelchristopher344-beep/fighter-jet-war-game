@@ -1095,7 +1095,6 @@ function paintEngines(screen, m) {
 }
 
 // src/game/sim.ts
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 var BEST_KEY = "sky-vanguard-best";
 var _fwd = new THREE5.Vector3();
 var _up = new THREE5.Vector3();
@@ -1129,9 +1128,9 @@ function mountSkyVanguard(host2, hooks) {
   const look = loadLook();
   const world = createWorld(scene, look);
   useSkin(look.panel);
-  const pmrem = new THREE5.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  pmrem.dispose();
+  // const pmrem = new THREE5.PMREMGenerator(renderer);
+  // scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  // pmrem.dispose();
   const camera = new THREE5.PerspectiveCamera(62, 1, 0.08, 28e3);
   scene.add(camera);
   const player = makeCraft("own", "203", false);
